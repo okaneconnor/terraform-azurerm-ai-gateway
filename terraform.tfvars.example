@@ -1,0 +1,11 @@
+location        = "uksouth"
+name_prefix     = "aigw"
+publisher_name  = "AI Platform Team"
+publisher_email = "you@example.com"
+
+# Phase toggles — flip to true one at a time, apply, validate, then move on.
+enable_token_governance   = false
+enable_semantic_cache     = false
+enable_content_safety     = false
+enable_mcp                = false
+enable_agents_selfservice = false

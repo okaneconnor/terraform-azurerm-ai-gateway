@@ -1,0 +1,27 @@
+<policies>
+  <inbound>
+    <base />
+    <set-backend-service backend-id="${backend_id}" />
+    <authentication-managed-identity resource="https://cognitiveservices.azure.com" output-token-variable-name="msi-access-token" ignore-error="false" />
+    <set-header name="Authorization" exists-action="override">
+      <value>@("Bearer " + (string)context.Variables["msi-access-token"])</value>
+    </set-header>
+    <llm-token-limit counter-key="@(context.Subscription.Id)" tokens-per-minute="${tpm}" token-quota="${quota}" token-quota-period="Monthly" estimate-prompt-tokens="false" remaining-tokens-variable-name="remainingTokens" remaining-quota-tokens-variable-name="remainingQuotaTokens" />
+    <llm-emit-token-metric namespace="llm-metrics">
+      <dimension name="Subscription ID" />
+      <dimension name="API ID" />
+      <dimension name="Client IP" value="@(context.Request.IpAddress)" />
+    </llm-emit-token-metric>
+  </inbound>
+  <backend>
+    <retry condition="@(context.Response.StatusCode == 429 || context.Response.StatusCode >= 500)" count="3" interval="2" max-interval="20" delta="2" first-fast-retry="false">
+      <forward-request buffer-request-body="true" />
+    </retry>
+  </backend>
+  <outbound>
+    <base />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>
