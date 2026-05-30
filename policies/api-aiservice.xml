@@ -1,0 +1,12 @@
+<policies>
+  <inbound>
+    <base />
+    <include-fragment fragment-id="ai-ip-allow" />
+    <include-fragment fragment-id="ai-auth-entra-jwt" />
+    <set-backend-service backend-id="${backend_id}" />
+    <include-fragment fragment-id="ai-backend-managed-identity" />
+  </inbound>
+  <backend><base /></backend>
+  <outbound><base /></outbound>
+  <on-error><base /></on-error>
+</policies>

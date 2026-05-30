@@ -1,0 +1,5 @@
+<fragment>
+  <ip-filter action="allow">
+    <address-range from="${ip_from}" to="${ip_to}" />
+  </ip-filter>
+</fragment>

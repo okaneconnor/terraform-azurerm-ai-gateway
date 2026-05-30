@@ -1,0 +1,13 @@
+<fragment>
+  <validate-azure-ad-token tenant-id="${tenant_id}" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized. Valid Entra ID token with an AI.Gateway role is required.">
+    <audiences>
+      <audience>${gateway_client_id}</audience>
+    </audiences>
+    <required-claims>
+      <claim name="roles" match="any">
+        <value>AI.Gateway.Sandbox</value>
+        <value>AI.Gateway.Production</value>
+      </claim>
+    </required-claims>
+  </validate-azure-ad-token>
+</fragment>

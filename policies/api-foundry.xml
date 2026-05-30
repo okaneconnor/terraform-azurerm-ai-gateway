@@ -1,0 +1,14 @@
+<policies>
+  <inbound>
+    <base />
+    <include-fragment fragment-id="ai-ip-allow" />
+    <include-fragment fragment-id="ai-auth-entra-jwt" />
+    <set-backend-service backend-id="foundry-backend" />
+    <include-fragment fragment-id="ai-backend-managed-identity" />
+    <include-fragment fragment-id="ai-content-safety" />
+    <include-fragment fragment-id="ai-token-metrics" />
+  </inbound>
+  <backend><base /></backend>
+  <outbound><base /></outbound>
+  <on-error><base /></on-error>
+</policies>

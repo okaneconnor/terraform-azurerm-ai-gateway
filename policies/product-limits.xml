@@ -1,0 +1,19 @@
+<policies>
+  <inbound>
+    <base />
+    <validate-azure-ad-token tenant-id="${tenant_id}" failed-validation-httpcode="403" failed-validation-error-message="Forbidden. Token does not carry the required tier role.">
+      <required-claims>
+        <claim name="roles" match="any">
+          <value>${role}</value>
+        </claim>
+      </required-claims>
+    </validate-azure-ad-token>
+    <rate-limit-by-key calls="${calls}" renewal-period="${renewal}"
+      counter-key="@(context.Request.Headers.GetValueOrDefault("Authorization","").AsJwt()?.Claims.GetValueOrDefault("azp",""))" />
+    <llm-token-limit tokens-per-minute="${tpm}" estimate-prompt-tokens="false"
+      counter-key="@(context.Request.Headers.GetValueOrDefault("Authorization","").AsJwt()?.Claims.GetValueOrDefault("azp",""))" />
+  </inbound>
+  <backend><base /></backend>
+  <outbound><base /></outbound>
+  <on-error><base /></on-error>
+</policies>
