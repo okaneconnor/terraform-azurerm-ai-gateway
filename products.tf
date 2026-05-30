@@ -31,6 +31,7 @@ resource "azurerm_api_management_product_api" "pa" {
   depends_on = [
     azurerm_api_management_api_policy.foundry,
     azurerm_api_management_api_policy.svc,
+    azurerm_api_management_product_policy.tier,
   ]
 }
 
@@ -40,10 +41,10 @@ resource "azurerm_api_management_product_policy" "tier" {
   api_management_name = azurerm_api_management.apim.name
   resource_group_name = azurerm_resource_group.rg.name
   xml_content = templatefile("${path.module}/policies/product-limits.xml", {
-    tenant_id = local.tenant_id
-    role      = each.value.app_role
-    tpm       = each.value.tokens_per_minute
-    calls     = each.value.rate_limit_calls
-    renewal   = var.rate_limit_renewal_seconds
+    tenant_id         = local.tenant_id
+    gateway_client_id = azuread_application.gateway.client_id
+    role              = each.value.app_role
+    calls             = each.value.rate_limit_calls
+    renewal           = var.rate_limit_renewal_seconds
   })
 }
