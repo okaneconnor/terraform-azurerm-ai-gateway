@@ -1226,3 +1226,29 @@ git commit -m "docs: finalize README, phased runbook, prod-hardening appendix, a
 - **Deliverables (spec §10):** Terraform (Tasks 0–6), policy XML (Tasks 1–5), README + appendix (Task 7), test scripts (Tasks 1–5), diagram (Task 7), `terraform.tfvars.example` (Task 0) ✓.
 
 **Known schema-verification points flagged inline (must be confirmed against the live registry/ARM reference during implementation, not guessed):** `circuit_breaker_rule` block argument names (Task 2 Step 3); Redis Enterprise/Managed Redis attribute names + connection string (Task 3 Step 1); MCP server ARM type/version/body (Task 5 Steps 1–2); A2A agent API ARM type/version/body (Task 6 Step 1). These are the only areas the research could not fully pin down because the features are preview and/or recently added to the provider.
+
+---
+
+## Implementation update (as-built — 2026-05-30)
+
+This plan was written for the original phased/toggle design. The build diverged;
+the commit history and `README.md` are the source of truth for the as-built result.
+Key deltas:
+
+- **Toggles removed (supersedes the `enable_*` variables and every
+  `count = var.x ? 1 : 0` / `dynamic` block in Tasks 0–6).** All resources are
+  always provisioned via a single `terraform apply`.
+- **Policy fragments consolidated** into one `policies/llm-gateway.xml` (the
+  Tasks 1–4 fragments were removed); `mcp-governance.xml` retained.
+- **Schema corrections confirmed against the live provider/registry and a clean
+  `terraform plan`:** `azurerm_managed_redis` (not `redis_enterprise_cluster`) with
+  `eviction_policy=NoEviction`; circuit breaker `accept_retry_after_enabled` /
+  `interval_duration` as a plain (non-dynamic) block; MCP via
+  `Microsoft.ApiManagement/service/apis@2025-09-01-preview`; API Center via
+  `Microsoft.ApiCenter/services@2024-03-01`; A2A agent API omitted (portal-only).
+- **Review fixes:** AOAI RBAC → "Cognitive Services OpenAI User"; Content Safety
+  backend URL wrapped in `trimsuffix`; retry carried into the consolidated policy;
+  MCP `ip-filter` removed for the public sandbox; MCP API wired into team products;
+  `allow_tracing=false` on subscriptions.
+- **Verification:** `terraform validate` passes; `terraform plan` against a live
+  subscription is clean (31 to add, 0 change, 0 destroy).

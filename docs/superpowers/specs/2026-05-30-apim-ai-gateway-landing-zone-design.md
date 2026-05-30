@@ -181,3 +181,41 @@ Resources map to `azurerm` types where available (`azurerm_api_management`,
 4. `test/` curl scripts per validation gate.
 5. An architecture diagram of the sandbox.
 6. `terraform.tfvars.example`.
+
+## 11. Implementation update (as-built — 2026-05-30)
+
+Sections 1–10 are the original brainstorming record. During implementation and a
+later refactor the build diverged from them. **The `README.md` is the source of
+truth for the as-built sandbox;** this section reconciles the design doc.
+
+- **No phasing / toggles (supersedes §2 "sequenced one capability per phase", §4,
+  and §10 "toggle-gated").** At the user's direction the `count`-based `enable_*`
+  feature flags were removed as a Terraform anti-pattern. All resources are
+  provisioned by a single `terraform apply`, mimicking production. Incremental
+  rollout, if ever needed, uses `terraform apply -target`.
+- **One consolidated policy (supersedes the §5 policy-fragment list).** The
+  per-phase fragments collapsed into a single always-on `policies/llm-gateway.xml`
+  (MI auth → content-safety → token-limit → emit-token-metric → semantic-cache
+  lookup; backend retry; outbound cache-store). `policies/mcp-governance.xml`
+  stays separate (different API). `locals.tf` and `outputs.tf` were added.
+- **RBAC least-privilege (supersedes "Cognitive Services User" on AOAI in §2/§3/§4).**
+  APIM MI gets **Cognitive Services OpenAI User** on the AOAI account and
+  **Cognitive Services User** on Content Safety.
+- **No backend load-balanced pool (refines §3/§4 "backend pool").** A single AOAI
+  backend with a circuit-breaker rule + retry policy is used; a load-balanced pool
+  (azapi-only in azurerm 4.74) was not built — there is a single AOAI account to
+  balance across in this sandbox, so circuit breaker + retry provide the resilience.
+- **MCP: govern-existing only (refines §4 Phase 5).** The "expose a sample REST API
+  as an MCP server" scenario was not built; only "govern an existing remote MCP
+  server" is implemented, via `azapi`
+  (`Microsoft.ApiManagement/service/apis@2025-09-01-preview`, `apiType=mcp`,
+  `schema_validation_enabled=false`).
+- **A2A agent API omitted (refines §4 Phase 6).** No stable ARM/azapi shape exists;
+  documented as a manual portal step (TODO in `agents-apicenter.tf`). API Center
+  (`Microsoft.ApiCenter/services@2024-03-01`) is built.
+- **Semantic-cache Redis = `azurerm_managed_redis`** (matches §3 "Azure Managed
+  Redis"; the plan's `azurerm_redis_enterprise_cluster` was deprecated). RediSearch
+  module + `eviction_policy=NoEviction` (required) confirmed via `terraform plan`.
+- **Verification:** `terraform validate` passes and `terraform plan` against a live
+  subscription is clean (31 to add, 0 change, 0 destroy). `terraform apply` remains
+  the user's step.
