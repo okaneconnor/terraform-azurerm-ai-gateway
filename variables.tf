@@ -1,3 +1,9 @@
+variable "subscription_id" {
+  description = "Target Azure subscription ID (kns-platforms-pod-mcp work subscription)."
+  type        = string
+  default     = "230414f6-3458-4f1a-9f5c-488281e13c14"
+}
+
 variable "location" {
   description = "Azure region for all resources. Note: verify model + Content Safety availability for your region."
   type        = string

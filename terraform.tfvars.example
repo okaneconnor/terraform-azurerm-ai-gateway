@@ -1,3 +1,6 @@
+# Target subscription (kns-platforms-pod-mcp work subscription).
+subscription_id = "230414f6-3458-4f1a-9f5c-488281e13c14"
+
 location        = "uksouth"
 name_prefix     = "aigw"
 publisher_name  = "AI Platform Team"

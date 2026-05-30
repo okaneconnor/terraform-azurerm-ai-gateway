@@ -19,7 +19,10 @@ terraform {
 
 provider "azurerm" {
   features {}
-  # subscription_id is read from ARM_SUBSCRIPTION_ID or `az account set`.
+  # Pinned explicitly so the provider never falls back to an ambient CLI default.
+  subscription_id = var.subscription_id
 }
 
-provider "azapi" {}
+provider "azapi" {
+  subscription_id = var.subscription_id
+}
