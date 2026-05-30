@@ -1,0 +1,32 @@
+<policies>
+  <inbound>
+    <base />
+    <set-backend-service backend-id="${backend_id}" />
+    <authentication-managed-identity resource="https://cognitiveservices.azure.com" output-token-variable-name="msi-access-token" ignore-error="false" />
+    <set-header name="Authorization" exists-action="override">
+      <value>@("Bearer " + (string)context.Variables["msi-access-token"])</value>
+    </set-header>
+    <llm-content-safety backend-id="${cs_backend_id}" shield-prompt="true">
+      <categories output-type="EightSeverityLevels">
+        <category name="Hate" threshold="4" />
+        <category name="Violence" threshold="4" />
+        <category name="SelfHarm" threshold="4" />
+        <category name="Sexual" threshold="4" />
+      </categories>
+    </llm-content-safety>
+    <llm-token-limit counter-key="@(context.Subscription.Id)" tokens-per-minute="${tpm}" token-quota="${quota}" token-quota-period="Monthly" estimate-prompt-tokens="false" />
+    <llm-emit-token-metric namespace="llm-metrics">
+      <dimension name="Subscription ID" />
+      <dimension name="API ID" />
+    </llm-emit-token-metric>
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>
