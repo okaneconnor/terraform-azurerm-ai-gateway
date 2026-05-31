@@ -1,50 +1,17 @@
-resource "azurerm_api_management_product" "tier" {
-  for_each              = var.products
-  product_id            = each.key
-  display_name          = each.value.display_name
-  api_management_name   = azurerm_api_management.apim.name
-  resource_group_name   = azurerm_resource_group.rg.name
-  published             = true
-  subscription_required = false # keyless; access gated by Entra JWT + IP
-}
-
-locals {
-  all_api_names = concat(
-    [azurerm_api_management_api.foundry.name],
-    [for k, a in azurerm_api_management_api.svc : a.name]
-  )
-  product_api_pairs = {
-    for pair in setproduct(keys(var.products), local.all_api_names) :
-    "${pair[0]}|${pair[1]}" => { product = pair[0], api = pair[1] }
-  }
-}
-
-resource "azurerm_api_management_product_api" "pa" {
-  for_each            = local.product_api_pairs
-  product_id          = azurerm_api_management_product.tier[each.value.product].product_id
-  api_name            = each.value.api
-  api_management_name = azurerm_api_management.apim.name
-  resource_group_name = azurerm_resource_group.rg.name
-
-  # Link only after the APIs are fully configured (incl. their policies), to avoid
-  # APIM eventual-consistency 400s when associating a not-yet-ready API to a product.
-  depends_on = [
-    azurerm_api_management_api_policy.foundry,
-    azurerm_api_management_api_policy.svc,
-    azurerm_api_management_product_policy.tier,
-  ]
-}
-
-resource "azurerm_api_management_product_policy" "tier" {
-  for_each            = var.products
-  product_id          = azurerm_api_management_product.tier[each.key].product_id
-  api_management_name = azurerm_api_management.apim.name
-  resource_group_name = azurerm_resource_group.rg.name
-  xml_content = templatefile("${path.module}/policies/product-limits.xml", {
-    tenant_id         = local.tenant_id
-    gateway_client_id = azuread_application.gateway.client_id
-    role              = each.value.app_role
-    calls             = each.value.rate_limit_calls
-    renewal           = var.rate_limit_renewal_seconds
-  })
-}
+# Products intentionally omitted (keyless model).
+#
+# APIM rule: an API can belong to at most ONE *open* product (a product with
+# subscription_required = false). Our gateway is keyless (Entra JWT, no
+# subscription keys), so two open tier-products (ai-sandbox / ai-production-standard)
+# both containing every API is impossible — APIM returns:
+#   "API cannot be added to more than one open product."
+# Product policies also do NOT execute for keyless requests (there is no
+# subscription -> product context at runtime).
+#
+# Therefore access is gated entirely by the API-level `ai-auth-entra-jwt` fragment
+# (validates the token + an AI.Gateway.* role), and per-tier throttling belongs in
+# the API policies keyed by the JWT app-role (AI.Gateway.Sandbox /
+# AI.Gateway.Production). See the README "Tiering" note and the follow-up to add a
+# role-based throttle fragment to the API policies.
+#
+# var.products is retained: it drives the Entra app roles in entra.tf.
