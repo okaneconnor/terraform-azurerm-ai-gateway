@@ -1,13 +1,22 @@
 <fragment>
-  <validate-azure-ad-token tenant-id="${tenant_id}" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized. Valid Entra ID token with an AI.Gateway role is required.">
+  <validate-azure-ad-token tenant-id="${tenant_id}" output-token-variable-name="entra-jwt" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized. Valid Entra ID token with a recognised gateway tier role is required.">
     <audiences>
       <audience>${gateway_client_id}</audience>
     </audiences>
     <required-claims>
       <claim name="roles" match="any">
-        <value>AI.Gateway.Sandbox</value>
-        <value>AI.Gateway.Production</value>
+%{ for role in app_roles ~}
+        <value>${role}</value>
+%{ endfor ~}
       </claim>
     </required-claims>
   </validate-azure-ad-token>
+  <!--
+    Single source of truth for the caller's identity: every downstream policy
+    (rate/token limits, cache vary-by, token metrics, MCP throttling) reads this
+    variable instead of re-parsing the Authorization header. Re-parsing the header
+    is WRONG further down the pipeline anyway: ai-backend-managed-identity
+    overwrites Authorization with APIM's MSI token (no azp claim).
+  -->
+  <set-variable name="caller-app-id" value="@(((Jwt)context.Variables[&quot;entra-jwt&quot;]).Claims.GetValueOrDefault(&quot;azp&quot;,&quot;&quot;))" />
 </fragment>

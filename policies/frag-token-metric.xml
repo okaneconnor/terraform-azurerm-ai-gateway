@@ -2,6 +2,9 @@
   <llm-emit-token-metric namespace="llm-metrics">
     <dimension name="API ID" />
     <dimension name="Client IP" value="@(context.Request.IpAddress)" />
-    <dimension name="App ID" value="@(context.Request.Headers.GetValueOrDefault(&quot;Authorization&quot;,&quot;&quot;).AsJwt()?.Claims.GetValueOrDefault(&quot;azp&quot;,&quot;&quot;))" />
+    <!-- caller-app-id is set by frag-entra-jwt from the VALIDATED client token.
+         Do not read the Authorization header here: by this point in the pipeline
+         ai-backend-managed-identity has overwritten it with the MSI token. -->
+    <dimension name="App ID" value="@((string)context.Variables[&quot;caller-app-id&quot;])" />
   </llm-emit-token-metric>
 </fragment>

@@ -1,19 +1,47 @@
 resource "azapi_resource" "api_center" {
+  count     = var.enable_api_center ? 1 : 0
   type      = "Microsoft.ApiCenter/services@2024-03-01"
   name      = local.apic_name
-  parent_id = azurerm_resource_group.rg.id
+  parent_id = local.resource_group_id
   location  = var.location
+  tags      = var.tags
 
   identity { type = "SystemAssigned" }
   body = { properties = {} }
 }
 
-# --- A2A agent API: FUTURE ---
-# No stable ARM/azapi apiType for A2A agent import as of 2026-05-30 (portal-only).
-# Register manually (APIM -> APIs -> + Add API -> A2A Agent); it auto-syncs to API Center.
-# Revisit when Microsoft publishes an ARM apiType/properties for A2A.
-
-output "api_center_name" {
-  description = "API Center service name."
-  value       = azapi_resource.api_center.name
+# Grant the API Center's system-assigned identity read access to the APIM instance,
+# so it can continuously synchronise the API inventory.
+resource "azurerm_role_assignment" "apic_apim_reader" {
+  count                = var.enable_api_center ? 1 : 0
+  scope                = azurerm_api_management.apim.id
+  role_definition_name = "API Management Service Reader Role"
+  principal_id         = azapi_resource.api_center[0].identity[0].principal_id
 }
+
+# Continuous one-way sync of APIM APIs (incl. MCP/A2A once present) into the API
+# Center catalog. This is the documented, codifiable integration
+# (Microsoft.ApiCenter/services/workspaces/apiSources). Sync can take minutes-to-hours.
+resource "azapi_resource" "apic_apim_source" {
+  count     = var.enable_api_center ? 1 : 0
+  type      = "Microsoft.ApiCenter/services/workspaces/apiSources@2024-06-01-preview"
+  name      = "apim-source"
+  parent_id = "${azapi_resource.api_center[0].id}/workspaces/default"
+
+  body = {
+    properties = {
+      azureApiManagementSource = {
+        resourceId = azurerm_api_management.apim.id
+      }
+      importSpecification = "always"
+    }
+  }
+
+  schema_validation_enabled = false
+  depends_on                = [azurerm_role_assignment.apic_apim_reader]
+}
+
+# --- A2A agent API: FUTURE (not codifiable) ---
+# No stable ARM/azapi apiType for A2A agent import (portal-only as of 2026-06).
+# Register manually (APIM -> APIs -> + Add API -> A2A Agent); it auto-syncs to API Center
+# via the apiSource integration above. Revisit when MS publishes an ARM apiType for A2A.

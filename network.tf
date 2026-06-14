@@ -1,28 +1,38 @@
+# Network: created by default, or skipped entirely when var.existing_network is set
+# (BYO VNet/subnets for landing-zone adoption). When BYO, you own the APIM subnet's
+# NSG — see README for the required APIM inbound/outbound rules.
+
 resource "azurerm_virtual_network" "main" {
+  count               = local.create_network ? 1 : 0
   name                = "${var.name_prefix}-vnet-${local.suffix}"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-  address_space       = [var.vnet_cidr]
+  location            = local.resource_group_location
+  resource_group_name = local.resource_group_name
+  address_space       = [var.network.vnet_cidr]
+  tags                = var.tags
 }
 
 resource "azurerm_subnet" "apim" {
+  count                = local.create_network ? 1 : 0
   name                 = "snet-apim"
-  resource_group_name  = azurerm_resource_group.rg.name
-  virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [var.apim_subnet_cidr]
+  resource_group_name  = local.resource_group_name
+  virtual_network_name = azurerm_virtual_network.main[0].name
+  address_prefixes     = [var.network.apim_subnet_cidr]
 }
 
 resource "azurerm_subnet" "pe" {
+  count                = local.create_network ? 1 : 0
   name                 = "snet-private-endpoints"
-  resource_group_name  = azurerm_resource_group.rg.name
-  virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [var.pe_subnet_cidr]
+  resource_group_name  = local.resource_group_name
+  virtual_network_name = azurerm_virtual_network.main[0].name
+  address_prefixes     = [var.network.pe_subnet_cidr]
 }
 
 resource "azurerm_network_security_group" "apim" {
+  count               = local.create_network ? 1 : 0
   name                = "nsg-apim-${local.suffix}"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  location            = local.resource_group_location
+  resource_group_name = local.resource_group_name
+  tags                = var.tags
 
   security_rule {
     name                       = "in-client-443"
@@ -104,6 +114,7 @@ resource "azurerm_network_security_group" "apim" {
 }
 
 resource "azurerm_subnet_network_security_group_association" "apim" {
-  subnet_id                 = azurerm_subnet.apim.id
-  network_security_group_id = azurerm_network_security_group.apim.id
+  count                     = local.create_network ? 1 : 0
+  subnet_id                 = azurerm_subnet.apim[0].id
+  network_security_group_id = azurerm_network_security_group.apim[0].id
 }

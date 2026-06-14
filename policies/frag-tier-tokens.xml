@@ -1,0 +1,19 @@
+<fragment>
+  <!--
+    Per-tier LLM tokens-per-minute limit (LLM APIs only), keyed by the calling
+    app's client id. Same rendered-from-var.tiers branching as frag-tier-rate.
+  -->
+  <choose>
+%{ for t in tiers ~}
+    <when condition="@(((Jwt)context.Variables[&quot;entra-jwt&quot;]).Claims.GetValueOrDefault(&quot;roles&quot;,&quot;&quot;).Contains(&quot;${t.app_role}&quot;))">
+      <llm-token-limit tokens-per-minute="${t.tokens_per_minute}" estimate-prompt-tokens="false" counter-key="@((string)context.Variables[&quot;caller-app-id&quot;])" />
+    </when>
+%{ endfor ~}
+    <otherwise>
+      <return-response>
+        <set-status code="403" reason="Forbidden" />
+        <set-body>Token carries no recognised gateway tier role.</set-body>
+      </return-response>
+    </otherwise>
+  </choose>
+</fragment>

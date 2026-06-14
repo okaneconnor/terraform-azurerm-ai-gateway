@@ -1,10 +1,10 @@
 <fragment>
-  <llm-content-safety backend-id="${cs_backend_id}" shield-prompt="true">
+  <llm-content-safety backend-id="${cs_backend_id}" shield-prompt="${shield_prompt}">
     <categories output-type="EightSeverityLevels">
-      <category name="Hate" threshold="4" />
-      <category name="Violence" threshold="4" />
-      <category name="SelfHarm" threshold="4" />
-      <category name="Sexual" threshold="4" />
+      <category name="Hate" threshold="${category_threshold}" />
+      <category name="Violence" threshold="${category_threshold}" />
+      <category name="SelfHarm" threshold="${category_threshold}" />
+      <category name="Sexual" threshold="${category_threshold}" />
     </categories>
   </llm-content-safety>
 </fragment>

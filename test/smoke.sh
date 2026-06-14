@@ -14,6 +14,10 @@ curl -s -o /dev/null -w "  HTTP %{http_code}\n" -X POST \
   -H "Content-Type: application/json" -d '{"messages":[{"role":"user","content":"hi"}],"max_tokens":5}'
 
 echo "3) Direct backend call, bypassing APIM (expect failure - public access disabled):"
-curl -s -o /dev/null -w "  HTTP %{http_code} (000/403 = blocked, good)\n" --max-time 15 -X POST \
+# 000 = connection blocked; 403 = PublicNetworkAccess denied; 401 = the public
+# front-end rejected the missing key BEFORE the network check — equally blocked,
+# since local (key) auth is disabled on the account, no key exists that could pass
+# that gate, and Entra-authenticated requests from outside the VNet get the PNA 403.
+curl -s -o /dev/null -w "  HTTP %{http_code} (000/401/403 = blocked, good)\n" --max-time 15 -X POST \
   "${FOUNDRY_ENDPOINT}openai/deployments/${DEPLOYMENT}/chat/completions?api-version=2024-10-21" \
   -H "Content-Type: application/json" -d '{"messages":[{"role":"user","content":"hi"}],"max_tokens":5}' || echo "  (connection blocked, good)"

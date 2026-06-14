@@ -1,16 +1,21 @@
-# Two-phase workaround: if apply locks Terraform out mid-run, set public_network_access_enabled = true,
-# apply, attach the private endpoint, then flip back to false in a second apply.
+# Optional private Key Vault for consumer workloads (the gateway itself stores no
+# secrets here). Two-phase workaround: if apply locks Terraform out mid-run, set
+# public_network_access_enabled = true, apply, attach the PE, then flip back.
 
 resource "azurerm_key_vault" "main" {
+  #checkov:skip=CKV_AZURE_110:purge protection is enabled by default via var.key_vault.purge_protection_enabled (checkov cannot resolve the object optional() default).
+  #checkov:skip=CKV_AZURE_42:soft-delete (90d) + purge protection are on by default via var.key_vault (checkov cannot resolve the object optional() default).
+  count                         = var.key_vault.enabled ? 1 : 0
   name                          = local.kv_name
-  location                      = azurerm_resource_group.rg.location
-  resource_group_name           = azurerm_resource_group.rg.name
+  location                      = local.resource_group_location
+  resource_group_name           = local.resource_group_name
   tenant_id                     = local.tenant_id
-  sku_name                      = "standard"
+  sku_name                      = var.key_vault.sku_name
   rbac_authorization_enabled    = true
-  purge_protection_enabled      = true
-  soft_delete_retention_days    = 90
+  purge_protection_enabled      = var.key_vault.purge_protection_enabled
+  soft_delete_retention_days    = var.key_vault.soft_delete_retention_days
   public_network_access_enabled = false
+  tags                          = var.tags
 
   network_acls {
     default_action = "Deny"
@@ -19,27 +24,9 @@ resource "azurerm_key_vault" "main" {
 }
 
 resource "azurerm_role_assignment" "apim_kv_secrets" {
-  scope                = azurerm_key_vault.main.id
+  count                = var.key_vault.enabled ? 1 : 0
+  scope                = azurerm_key_vault.main[0].id
   role_definition_name = "Key Vault Secrets User"
   principal_id         = azurerm_api_management.apim.identity[0].principal_id
   principal_type       = "ServicePrincipal"
-}
-
-resource "azurerm_private_endpoint" "kv" {
-  name                = "pe-kv-${local.suffix}"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-  subnet_id           = azurerm_subnet.pe.id
-
-  private_service_connection {
-    name                           = "psc-kv"
-    private_connection_resource_id = azurerm_key_vault.main.id
-    subresource_names              = ["vault"]
-    is_manual_connection           = false
-  }
-
-  private_dns_zone_group {
-    name                 = "pdnszg-kv"
-    private_dns_zone_ids = [azurerm_private_dns_zone.zone["keyvault"].id]
-  }
 }

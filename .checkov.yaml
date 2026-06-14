@@ -1,0 +1,8 @@
+# Checkov defaults for `checkov -d .` (and the pre-commit hook).
+# Per-resource false positives are suppressed inline with `#checkov:skip=<ID>:<reason>`
+# comments next to the resource — search the .tf files to see each justification.
+framework:
+  - terraform
+compact: true
+quiet: true
+download-external-modules: false

@@ -3,12 +3,40 @@
     <base />
     <include-fragment fragment-id="ai-ip-allow" />
     <include-fragment fragment-id="ai-auth-entra-jwt" />
-    <set-backend-service backend-id="foundry-backend" />
+    <include-fragment fragment-id="ai-tier-rate" />
+    <include-fragment fragment-id="ai-tier-tokens" />
+    <!-- backend-mi must precede content-safety: the llm-content-safety call rides
+         on the Authorization header, which this fragment swaps to the MSI token. -->
     <include-fragment fragment-id="ai-backend-managed-identity" />
-    <include-fragment fragment-id="ai-content-safety" />
+%{ if content_safety_enabled || semantic_cache_enabled ~}
+    <!-- Embeddings requests carry no chat messages: content safety on them is
+         undefined behaviour and a cache lookup can never hit — skip both. The
+         check is INVERTED (skip only /embeddings) so anything else stays
+         screened by default (fail closed). -->
+    <choose>
+      <when condition="@(!context.Request.OriginalUrl.Path.Contains(&quot;/embeddings&quot;))">
+%{ if content_safety_enabled ~}
+        <!-- Screens EVERY prompt — deliberately placed before the semantic cache
+             so cache hits cannot bypass Prompt Shield. -->
+        <include-fragment fragment-id="ai-content-safety" />
+%{ endif ~}
+%{ if semantic_cache_enabled ~}
+        <llm-semantic-cache-lookup score-threshold="${score_threshold}" embeddings-backend-id="embeddings-backend" embeddings-backend-auth="system-assigned" ignore-system-messages="true">
+          <vary-by>@((string)context.Variables[&quot;caller-app-id&quot;])</vary-by>
+        </llm-semantic-cache-lookup>
+%{ endif ~}
+      </when>
+    </choose>
+%{ endif ~}
+    <set-backend-service backend-id="foundry-pool" />
     <include-fragment fragment-id="ai-token-metrics" />
   </inbound>
   <backend><base /></backend>
-  <outbound><base /></outbound>
+  <outbound>
+    <base />
+%{ if semantic_cache_enabled ~}
+    <llm-semantic-cache-store duration="${cache_duration}" />
+%{ endif ~}
+  </outbound>
   <on-error><base /></on-error>
 </policies>

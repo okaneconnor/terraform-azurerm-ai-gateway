@@ -1,5 +1,7 @@
 <fragment>
   <ip-filter action="allow">
-    <address-range from="${ip_from}" to="${ip_to}" />
+%{ for r in ranges ~}
+    <address-range from="${r.from}" to="${r.to}" />
+%{ endfor ~}
   </ip-filter>
 </fragment>

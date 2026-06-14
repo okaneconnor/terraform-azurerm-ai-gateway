@@ -1,0 +1,22 @@
+# terraform-docs config. Regenerate the README inputs/outputs tables with:
+#   terraform-docs .
+formatter: markdown table
+
+output:
+  file: README.md
+  mode: inject
+  template: |-
+    <!-- BEGIN_TF_DOCS -->
+    {{ .Content }}
+    <!-- END_TF_DOCS -->
+
+sort:
+  enabled: true
+  by: required
+
+settings:
+  anchor: false
+  description: true
+  required: true
+  sensitive: true
+  type: true

@@ -1,0 +1,26 @@
+<fragment>
+  <!--
+    Per-tier request rate limit, keyed by the calling app's client id (the
+    caller-app-id variable set by frag-entra-jwt). Branches are rendered from
+    var.tiers, ordered by tokens_per_minute DESC so a multi-role client lands on
+    its highest tier.
+
+    Jwt.Claims.GetValueOrDefault(name, "") returns claim values comma-joined (the
+    only documented accessor), so .Contains() is a substring match — safe because
+    variables.tf validates that no app_role is a substring of another.
+  -->
+  <choose>
+%{ for t in tiers ~}
+    <when condition="@(((Jwt)context.Variables[&quot;entra-jwt&quot;]).Claims.GetValueOrDefault(&quot;roles&quot;,&quot;&quot;).Contains(&quot;${t.app_role}&quot;))">
+      <rate-limit-by-key calls="${t.rate_limit_calls}" renewal-period="${renewal}" counter-key="@((string)context.Variables[&quot;caller-app-id&quot;])" />
+    </when>
+%{ endfor ~}
+    <otherwise>
+      <!-- Unreachable when frag-entra-jwt enforces the same role list; kept as a fail-closed guard. -->
+      <return-response>
+        <set-status code="403" reason="Forbidden" />
+        <set-body>Token carries no recognised gateway tier role.</set-body>
+      </return-response>
+    </otherwise>
+  </choose>
+</fragment>

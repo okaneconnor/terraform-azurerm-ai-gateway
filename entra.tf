@@ -1,8 +1,13 @@
+# Gateway app registration: the audience clients request tokens for, carrying one
+# Application app role per tier. Skipped entirely when the consumer brings their
+# own app (var.existing_gateway_app) — locals.gateway_client_id abstracts the two.
+
 resource "random_uuid" "role" {
-  for_each = var.products
+  for_each = var.existing_gateway_app == null ? var.tiers : {}
 }
 
 resource "azuread_application" "gateway" {
+  count            = var.existing_gateway_app == null ? 1 : 0
   display_name     = "${var.name_prefix}-gateway-${local.suffix}"
   identifier_uris  = ["api://${var.name_prefix}-gateway-${local.suffix}"]
   sign_in_audience = "AzureADMyOrg"
@@ -13,7 +18,7 @@ resource "azuread_application" "gateway" {
   }
 
   dynamic "app_role" {
-    for_each = var.products
+    for_each = var.tiers
     content {
       allowed_member_types = ["Application"]
       description          = "Access the ${app_role.value.display_name} tier"
@@ -26,29 +31,37 @@ resource "azuread_application" "gateway" {
 }
 
 resource "azuread_service_principal" "gateway" {
-  client_id = azuread_application.gateway.client_id
+  count     = var.existing_gateway_app == null ? 1 : 0
+  client_id = azuread_application.gateway[0].client_id
   owners    = [data.azuread_client_config.current.object_id]
 }
 
-# Demo client application (one per tier could be created; here one client granted sandbox)
-resource "azuread_application" "client" {
-  display_name     = "${var.name_prefix}-client-${local.suffix}"
+# Optional demo clients — one per tier, each granted that tier's app role. Useful
+# for end-to-end testing (test/ scripts); off by default so real deployments
+# don't ship unused credentials.
+
+resource "azuread_application" "demo" {
+  for_each         = var.create_demo_clients ? var.tiers : {}
+  display_name     = "${var.name_prefix}-client-${each.key}-${local.suffix}"
   sign_in_audience = "AzureADMyOrg"
   owners           = [data.azuread_client_config.current.object_id]
 }
 
-resource "azuread_service_principal" "client" {
-  client_id = azuread_application.client.client_id
+resource "azuread_service_principal" "demo" {
+  for_each  = var.create_demo_clients ? var.tiers : {}
+  client_id = azuread_application.demo[each.key].client_id
   owners    = [data.azuread_client_config.current.object_id]
 }
 
-resource "azuread_application_password" "client" {
-  application_id = azuread_application.client.id
+resource "azuread_application_password" "demo" {
+  for_each       = var.create_demo_clients ? var.tiers : {}
+  application_id = azuread_application.demo[each.key].id
   display_name   = "client-credentials"
 }
 
-resource "azuread_app_role_assignment" "client_sandbox" {
-  app_role_id         = azuread_service_principal.gateway.app_role_ids["AI.Gateway.Sandbox"]
-  principal_object_id = azuread_service_principal.client.object_id
-  resource_object_id  = azuread_service_principal.gateway.object_id
+resource "azuread_app_role_assignment" "demo" {
+  for_each            = var.create_demo_clients ? var.tiers : {}
+  app_role_id         = azuread_service_principal.gateway[0].app_role_ids[each.value.app_role]
+  principal_object_id = azuread_service_principal.demo[each.key].object_id
+  resource_object_id  = azuread_service_principal.gateway[0].object_id
 }
