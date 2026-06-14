@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Verifies the deployment-SKU Azure Policy denies non-allowlisted (non-regional) SKUs.
 # Prereqs: az login; RG + FOUNDRY exported — both are module outputs:
-#   RG=$(terraform -chdir=examples/complete output -raw resource_group_name)
-#   FOUNDRY=$(terraform -chdir=examples/complete output -raw foundry_account_name)
+#   RG=$(terraform output -raw resource_group_name)
+#   FOUNDRY=$(terraform output -raw foundry_account_name)
 # Optional: MODEL_NAME / MODEL_VERSION override the probe model.
 set -uo pipefail
 : "${RG:?set RG to the resource group}" "${FOUNDRY:?set FOUNDRY to the AIServices account name}"

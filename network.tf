@@ -20,6 +20,7 @@ resource "azurerm_subnet" "apim" {
 }
 
 resource "azurerm_subnet" "pe" {
+  #checkov:skip=CKV2_AZURE_31:Private-endpoint subnet — private endpoints bypass subnet NSGs (network policies disabled), so an NSG here has no effect. The APIM subnet carries the NSG; all backends have public access disabled.
   count                = local.create_network ? 1 : 0
   name                 = "snet-private-endpoints"
   resource_group_name  = local.resource_group_name

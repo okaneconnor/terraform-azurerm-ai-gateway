@@ -39,20 +39,19 @@ module "ai_gateway" {
 }
 ```
 
-That's the whole minimal config — see [`examples/basic`](examples/basic). For every
-knob (custom tiers, models, cache tuning, BYO Entra app, …) see
-[`examples/complete`](examples/complete).
+That's the whole minimal config. Every other knob (custom tiers, models, cache
+tuning, BYO networking / Entra app, …) is an optional variable — see the
+[Inputs](#inputs) reference below and the [usage guide](docs/usage.md).
 
 ```bash
-cd examples/basic
 terraform init
 terraform apply -var subscription_id=<sub-id>   # APIM VNet provisioning takes ~30-45 min
 ```
 
-> Providers are configured by the **caller** (see the examples) — the module itself
-> only pins `required_providers`: azurerm ~> 4.74, azuread ~> 3.0, azapi ~> 2.0,
-> random ~> 3.6. Terraform >= 1.9. You need Entra permissions to create app
-> registrations (or use `existing_gateway_app`).
+> Providers are configured by the **caller** — the module itself only pins
+> `required_providers`: azurerm ~> 4.74, azuread ~> 3.0, azapi ~> 2.0, random ~> 3.6.
+> Terraform >= 1.9. You need Entra permissions to create app registrations (or use
+> `existing_gateway_app`).
 
 ## Documentation
 
@@ -78,10 +77,10 @@ terraform apply -var subscription_id=<sub-id>   # APIM VNet provisioning takes ~
 
 | Name | Version |
 | ---- | ------- |
-| azapi | 2.10.0 |
-| azuread | 3.8.0 |
-| azurerm | 4.77.0 |
-| random | 3.9.0 |
+| azapi | ~> 2.0 |
+| azuread | ~> 3.0 |
+| azurerm | ~> 4.74 |
+| random | ~> 3.6 |
 
 ## Modules
 
@@ -234,7 +233,8 @@ terraform init -backend=false && terraform test   # 20 plan-mode unit tests, moc
 ```
 
 Live end-to-end tests (auth, content safety, cache, tiers, residency) run against a
-deployed `examples/complete` — see [docs/usage.md](docs/usage.md#tests).
+live deployment of the module with `create_demo_clients = true` — see
+[docs/usage.md](docs/usage.md#tests).
 
 ## Contributing
 

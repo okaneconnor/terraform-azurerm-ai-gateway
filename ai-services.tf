@@ -3,6 +3,7 @@
 # then flip to false if an apply ever locks Terraform out mid-run.
 
 resource "azurerm_cognitive_account" "svc" {
+  #checkov:skip=CKV2_AZURE_22:Uses Microsoft-managed keys by design; customer-managed key encryption (a KV key + identity wiring) is a consumer/org choice, not forced by this generic module.
   for_each              = var.ai_services
   name                  = "${var.name_prefix}-${each.value.short_name}-${local.suffix}"
   location              = local.resource_group_location

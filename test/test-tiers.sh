@@ -2,8 +2,8 @@
 # Tier-separation test. Prereqs (export):
 #   GATEWAY_URL DEPLOYMENT TENANT_ID GATEWAY_APP_ID
 #   SANDBOX_CLIENT_ID SANDBOX_CLIENT_SECRET PROD_CLIENT_ID PROD_CLIENT_SECRET
-# With the module's demo clients (create_demo_clients = true), read them from the
-# example deployment:  terraform -chdir=examples/complete output -json demo_clients
+# With the module's demo clients (create_demo_clients = true), read them from your
+# deployment directory:  terraform output -json demo_clients
 set -uo pipefail
 : "${GATEWAY_URL:?}" "${DEPLOYMENT:?}" "${TENANT_ID:?}" "${GATEWAY_APP_ID:?}"
 : "${SANDBOX_CLIENT_ID:?}" "${SANDBOX_CLIENT_SECRET:?}" "${PROD_CLIENT_ID:?}" "${PROD_CLIENT_SECRET:?}"

@@ -13,17 +13,3 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "deps"
-
-  - package-ecosystem: "terraform"
-    directory: "/examples/basic"
-    schedule:
-      interval: "weekly"
-    commit-message:
-      prefix: "deps"
-
-  - package-ecosystem: "terraform"
-    directory: "/examples/complete"
-    schedule:
-      interval: "weekly"
-    commit-message:
-      prefix: "deps"

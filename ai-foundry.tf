@@ -1,17 +1,13 @@
-# Two-phase workaround: if apply locks Terraform out, set public_network_access_enabled = true,
-# apply, attach the private endpoint, then flip back to false in a second apply.
-
 resource "azurerm_cognitive_account" "foundry" {
+  #checkov:skip=CKV2_AZURE_22:Uses Microsoft-managed keys by design; customer-managed key encryption (a KV key + identity wiring) is a consumer/org choice, not forced by this generic module.
   name                  = local.foundry_name
   location              = local.resource_group_location
   resource_group_name   = local.resource_group_name
-  kind                  = "AIServices" # unified Foundry account (OpenAI + multi-service); required for the model + embeddings deployments
+  kind                  = "AIServices"
   sku_name              = var.foundry_account_sku
   custom_subdomain_name = local.foundry_name
   tags                  = var.tags
 
-  # Entra-only: the gateway authenticates with its managed identity, so account
-  # keys are an unused second credential plane — keep them disabled.
   local_auth_enabled = false
 
   public_network_access_enabled = false
@@ -25,9 +21,6 @@ resource "azurerm_cognitive_account" "foundry" {
   }
 }
 
-# Consumer-chosen model deployments (any model/SKU/capacity the region offers).
-# Concurrent deployments to one account can 409 transiently; re-apply or use
-# -parallelism=1 if that occurs.
 resource "azurerm_cognitive_deployment" "model" {
   for_each             = var.model_deployments
   name                 = each.key

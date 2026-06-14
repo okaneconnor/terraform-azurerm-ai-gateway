@@ -1,35 +1,45 @@
 # Usage guide
 
-How to deploy the gateway, get a token, onboard teams, and run the live tests.
-For the full input/output reference see the generated tables in the
+How to deploy the gateway, get a token, onboard teams, and run the live tests. For
+the full input/output reference see the generated tables in the
 [README](../README.md). For the architecture and design rationale see
 [architecture.md](architecture.md).
 
 ## Deploy
 
+Call the module from your own root configuration. The minimum is `location` plus
+publisher info — everything else is an optional variable with a sensible default.
+
 ```hcl
+# main.tf
+provider "azurerm" {
+  features {}
+  subscription_id = var.subscription_id
+}
+provider "azuread" {}
+provider "azapi" {}
+
 module "ai_gateway" {
   source = "github.com/okaneconnor/ai-gateway"
 
   location        = "uksouth"
   publisher_name  = "AI Platform Team"
   publisher_email = "platform@example.com"
+
+  # Optional — create one demo client app (with secret) per tier for end-to-end
+  # testing. Leave false (default) for real deployments.
+  create_demo_clients = true
 }
 ```
 
-That's the whole minimal config — see [`examples/basic`](../examples/basic). For
-every knob (custom tiers, models, cache tuning, BYO Entra app, …) see
-[`examples/complete`](../examples/complete).
-
 ```bash
-cd examples/basic
 terraform init
 terraform apply -var subscription_id=<sub-id>   # APIM VNet provisioning takes ~30-45 min
 ```
 
-> Providers are configured by the **caller** (see the examples) — the module itself
-> only pins `required_providers`. You need Entra permissions to create app
-> registrations (or use `existing_gateway_app`).
+> Providers are configured by the **caller** (above) — the module itself only pins
+> `required_providers`. You need Entra permissions to create app registrations (or
+> set `existing_gateway_app`).
 
 ## Bring-your-own (landing-zone adoption)
 
@@ -60,16 +70,17 @@ Integration **outputs** for peering / wiring the gateway into your estate:
 
 ## Get a token
 
-With `create_demo_clients = true` (as in `examples/complete`):
+Run these from the directory you deployed the module in, with
+`create_demo_clients = true`. Replace `<repo>` with the path to a checkout of this
+module (the helper scripts live under its `test/`).
 
 ```bash
-cd examples/complete
 export TENANT_ID=$(terraform output -raw tenant_id)
 export GATEWAY_APP_ID=$(terraform output -raw gateway_app_client_id)
 export CLIENT_ID=$(terraform output -json demo_clients | jq -r '."ai-sandbox".client_id')
 export CLIENT_SECRET=$(terraform output -json demo_clients | jq -r '."ai-sandbox".client_secret')
 
-TOKEN=$(../../test/get-token.sh)
+TOKEN=$(<repo>/test/get-token.sh)
 ```
 
 The script requests `scope=<gateway_app_client_id>/.default` from the Entra v2 token
@@ -98,16 +109,19 @@ curl -s -X POST "$GATEWAY_URL/openai/deployments/gpt-4.1-mini/chat/completions?a
 
 ## Tests
 
-**Module unit tests** (no Azure credentials — mocked providers):
+**Module unit tests** (no Azure credentials — mocked providers), from a checkout of
+this module:
 
 ```bash
 terraform init -backend=false && terraform test
 ```
 
-**Live tests** against a deployment with demo clients (`examples/complete`):
+**Live tests** against a deployment with demo clients
+(`create_demo_clients = true`). Export the outputs from your deployment directory,
+then run the scripts from a checkout of this module:
 
 ```bash
-cd examples/complete
+# from your module deployment directory:
 export TENANT_ID=$(terraform output -raw tenant_id)
 export GATEWAY_APP_ID=$(terraform output -raw gateway_app_client_id)
 export GATEWAY_URL=$(terraform output -raw apim_gateway_url)
@@ -117,10 +131,9 @@ export CLIENT_SECRET=$(terraform output -json demo_clients | jq -r '."ai-sandbox
 export SANDBOX_CLIENT_ID=$CLIENT_ID SANDBOX_CLIENT_SECRET=$CLIENT_SECRET
 export PROD_CLIENT_ID=$(terraform output -json demo_clients | jq -r '."ai-production-standard".client_id')
 export PROD_CLIENT_SECRET=$(terraform output -json demo_clients | jq -r '."ai-production-standard".client_secret')
-export TOKEN=$(../../test/get-token.sh)
+export TOKEN=$(<repo>/test/get-token.sh)
 export RG=$(terraform output -raw resource_group_name)
 export FOUNDRY=$(terraform output -raw foundry_account_name)
-cd ../..
 ```
 
 | Script | What it covers |

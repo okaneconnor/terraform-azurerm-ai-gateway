@@ -219,7 +219,7 @@ run "extra_tier_and_demo_clients" {
   }
 }
 
-# Mirrors examples/complete: every feature on, three tiers, demo clients. Asserts
+# Full-stack shape: every feature on, three tiers, demo clients. Asserts
 # the FULL gateway resource graph materializes from the module — the strongest
 # offline proof that a complete deployment renders correctly.
 run "full_stack_shape" {

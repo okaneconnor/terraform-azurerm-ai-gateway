@@ -1,0 +1,25 @@
+name: terraform-docs
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Render terraform-docs into README.md and push back to the PR branch
+        uses: terraform-docs/gh-actions@v1.4.1
+        with:
+          working-dir: .
+          config-file: .terraform-docs.yml
+          output-file: README.md
+          output-method: inject
+          git-push: "true"
+          git-commit-message: "docs: terraform-docs auto-update"

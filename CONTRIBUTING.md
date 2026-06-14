@@ -27,14 +27,6 @@ terraform-docs .                              # regenerate the README Inputs/Out
 bash scripts/scan.sh                          # tfsec + checkov (fails closed if neither installed)
 ```
 
-Validate the examples too:
-
-```bash
-for d in examples/basic examples/complete; do
-  ( cd "$d" && terraform init -backend=false && terraform validate )
-done
-```
-
 ### Pre-commit
 
 A [`.pre-commit-config.yaml`](.pre-commit-config.yaml) wires `fmt` → `validate` →
