@@ -13,7 +13,7 @@
   </validate-azure-ad-token>
   <!--
     Single source of truth for the caller's identity: every downstream policy
-    (rate/token limits, cache vary-by, token metrics, MCP throttling) reads this
+    (rate/token limits, cache vary-by, token metrics) reads this
     variable instead of re-parsing the Authorization header. Re-parsing the header
     is WRONG further down the pipeline anyway: ai-backend-managed-identity
     overwrites Authorization with APIM's MSI token (no azp claim).

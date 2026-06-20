@@ -13,16 +13,9 @@ resource "azurerm_policy_definition" "allowed_deployment_skus" {
   mode         = "All"
   display_name = "Allow only approved Cognitive Services model-deployment SKUs (${var.name_prefix}-${local.suffix})"
 
-  # Object keys quoted ("if"/"then") so checkov's HCL parser accepts the file;
-  # Terraform treats quoted and bare keys identically.
-  policy_rule = jsonencode({
-    "if" = {
-      allOf = [
-        { field = "type", equals = "Microsoft.CognitiveServices/accounts/deployments" },
-        { field = "Microsoft.CognitiveServices/accounts/deployments/sku.name", notIn = var.deployment_sku_policy.allowed_sku_names },
-      ]
-    }
-    "then" = { effect = "deny" }
+  # Policy rule lives in policies/ (like the APIM policy files) rather than inline.
+  policy_rule = templatefile("${path.module}/policies/deployment-sku-allowlist.json", {
+    allowed_sku_names = jsonencode(var.deployment_sku_policy.allowed_sku_names)
   })
 }
 

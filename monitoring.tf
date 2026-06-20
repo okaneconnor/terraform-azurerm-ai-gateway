@@ -22,7 +22,6 @@ resource "azurerm_monitor_diagnostic_setting" "apim" {
 
   enabled_log { category = "GatewayLogs" }
   enabled_log { category = "GatewayLlmLogs" }
-  enabled_log { category = "GatewayMCPLogs" }
   enabled_log { category = "WebSocketConnectionLogs" }
   enabled_log { category = "DeveloperPortalAuditLogs" }
 

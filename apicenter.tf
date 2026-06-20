@@ -19,7 +19,7 @@ resource "azurerm_role_assignment" "apic_apim_reader" {
   principal_id         = azapi_resource.api_center["this"].identity[0].principal_id
 }
 
-# Continuous one-way sync of APIM APIs (incl. MCP/A2A once present) into the API
+# Continuous one-way sync of APIM APIs into the API
 # Center catalog. This is the documented, codifiable integration
 # (Microsoft.ApiCenter/services/workspaces/apiSources). Sync can take minutes-to-hours.
 resource "azapi_resource" "apic_apim_source" {

@@ -22,9 +22,9 @@ Run these before opening a PR — CI runs the same set:
 terraform fmt -recursive                      # format
 terraform init -backend=false                 # init without a backend / creds
 terraform validate                            # validate the module
-terraform test                                # 20 plan-mode unit tests (mocked providers)
+terraform test                                # plan-mode unit tests (mocked providers)
 terraform-docs .                              # regenerate the README Inputs/Outputs block
-bash scripts/scan.sh                          # tfsec + checkov (fails closed if neither installed)
+tfsec . && checkov -d .                       # static analysis (or: pre-commit run -a)
 ```
 
 ### Pre-commit

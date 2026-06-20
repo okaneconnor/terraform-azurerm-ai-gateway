@@ -460,33 +460,3 @@ variable "create_demo_clients" {
   }
 }
 
-# ── MCP (preview) ────────────────────────────────────────────────────────────
-
-variable "enable_mcp" {
-  description = <<-EOT
-    Provision the governed MCP server API (azapi, preview). Default false.
-    APIM MCP support is preview and its passthrough provisioning via ARM/azapi is
-    not yet reliable (the API deploys but may not route). The reliable path today
-    is the portal (APIs -> MCP servers -> Create). Enable to try the codified
-    preview shape; it's catalogued by the API Center sync once functional.
-  EOT
-  type        = bool
-  default     = false
-}
-
-variable "mcp_server_url" {
-  description = "Upstream MCP server fronted by the gateway when enable_mcp = true."
-  type        = string
-  default     = "https://learn.microsoft.com/api/mcp"
-
-  validation {
-    condition     = can(regex("^https://", var.mcp_server_url))
-    error_message = "mcp_server_url must be an https:// URL."
-  }
-}
-
-variable "mcp_rate_limit_calls" {
-  description = "Per-client calls/minute on the MCP API."
-  type        = number
-  default     = 60
-}

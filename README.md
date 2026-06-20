@@ -155,13 +155,13 @@ module "ai_gateway" {
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | Architecture diagram, keyless/tiering model, policy chain, data residency, resilience & caching |
 | [docs/usage.md](docs/usage.md) | Deploy, bring-your-own / landing-zone adoption, get a token, onboard a team, live tests |
-| [docs/operations.md](docs/operations.md) | Deployment gotchas, MCP (preview), A2A agents, production hardening, cost, linting & scanning |
+| [docs/operations.md](docs/operations.md) | Deployment gotchas, A2A agents, production hardening, cost, linting & scanning |
 
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | terraform | >= 1.9.0 |
 | azapi | ~> 2.0 |
 | azuread | ~> 3.0 |
@@ -171,11 +171,11 @@ module "ai_gateway" {
 ## Providers
 
 | Name | Version |
-|------|---------|
-| azapi | ~> 2.0 |
-| azuread | ~> 3.0 |
-| azurerm | ~> 4.74 |
-| random | ~> 3.6 |
+| ---- | ------- |
+| azapi | 2.10.0 |
+| azuread | 3.8.0 |
+| azurerm | 4.77.0 |
+| random | 3.9.0 |
 
 ## Modules
 
@@ -184,11 +184,10 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [azapi_resource.api_center](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
 | [azapi_resource.apic_apim_source](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
 | [azapi_resource.apim_azuremonitor_logger](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
-| [azapi_resource.existing_mcp](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
 | [azapi_resource.foundry_member](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
 | [azapi_resource.foundry_pool](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
 | [azapi_resource.llm_diagnostic](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
@@ -204,7 +203,6 @@ No modules.
 | [azurerm_api_management_api.svc](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_api) | resource |
 | [azurerm_api_management_api_operation.svc_wildcard](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_api_operation) | resource |
 | [azurerm_api_management_api_policy.foundry](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_api_policy) | resource |
-| [azurerm_api_management_api_policy.mcp](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_api_policy) | resource |
 | [azurerm_api_management_api_policy.svc](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_api_policy) | resource |
 | [azurerm_api_management_backend.embeddings](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_backend) | resource |
 | [azurerm_api_management_backend.svc](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_backend) | resource |
@@ -253,7 +251,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | location | Azure region for all resources. Choose a region where your chat + embeddings models are available with the deployment SKUs you allow (see deployment\_sku\_policy). | `string` | n/a | yes |
 | publisher\_email | APIM publisher email. | `string` | n/a | yes |
 | publisher\_name | APIM publisher name (shown in the developer portal). | `string` | n/a | yes |
@@ -267,7 +265,6 @@ No modules.
 | create\_demo\_clients | Create one demo client app (with secret) per tier, role-assigned to that tier — handy for testing the gateway end-to-end. Off by default so real deployments don't ship unused credentials. Requires the module-created gateway app (not BYO). | `bool` | `false` | no |
 | deployment\_sku\_policy | Azure Policy guardrail denying model-deployment SKUs outside the allowlist.<br/>The default ["Standard"] keeps inference in-region (data residency): Global*/<br/>DataZone* SKUs process data outside the deployment region and are denied.<br/>Extend the list (e.g. "ProvisionedManaged", "Batch") if regional processing<br/>under those SKUs fits your residency requirements. | <pre>object({<br/>    enabled           = optional(bool, true)<br/>    allowed_sku_names = optional(list(string), ["Standard"])<br/>  })</pre> | `{}` | no |
 | enable\_api\_center | Deploy an API Center service that continuously catalogues the gateway's APIs. | `bool` | `true` | no |
-| enable\_mcp | Provision the governed MCP server API (azapi, preview). Default false.<br/>APIM MCP support is preview and its passthrough provisioning via ARM/azapi is<br/>not yet reliable (the API deploys but may not route). The reliable path today<br/>is the portal (APIs -> MCP servers -> Create). Enable to try the codified<br/>preview shape; it's catalogued by the API Center sync once functional. | `bool` | `false` | no |
 | enable\_workbook | Deploy the Azure Monitor workbook (token usage by client app, request volume). | `bool` | `true` | no |
 | existing\_application\_insights | Bring-your-own Application Insights for APIM request/token telemetry. When set the module uses it instead of creating one (needs both the resource id and its connection string). Leave null to create one wired to the workspace. | <pre>object({<br/>    id                = string<br/>    connection_string = string<br/>  })</pre> | `null` | no |
 | existing\_gateway\_app | Bring-your-own gateway app registration for tenants where Entra app creation<br/>is restricted. The app must: be single-tenant, request v2 access tokens, and<br/>define one Application app role per tier whose `value` matches tiers[*].app\_role.<br/>Leave null (default) and the module creates and wires the app itself. | <pre>object({<br/>    client_id = string<br/>  })</pre> | `null` | no |
@@ -279,8 +276,6 @@ No modules.
 | key\_vault | Optional private Key Vault (RBAC, purge protection, private endpoint) for<br/>consumer workloads' secrets — the gateway itself stores nothing in it. Set<br/>enabled=false to skip. SKU / retention / purge-protection are tunable for org<br/>policy (e.g. premium for HSM-backed keys). | <pre>object({<br/>    enabled                    = optional(bool, true)<br/>    sku_name                   = optional(string, "standard")<br/>    soft_delete_retention_days = optional(number, 90)<br/>    purge_protection_enabled   = optional(bool, true)<br/>  })</pre> | `{}` | no |
 | log\_analytics\_sku | SKU for the module-created Log Analytics workspace (ignored when existing\_log\_analytics\_workspace\_id is set). | `string` | `"PerGB2018"` | no |
 | log\_retention\_days | Retention for the module-created Log Analytics workspace. | `number` | `30` | no |
-| mcp\_rate\_limit\_calls | Per-client calls/minute on the MCP API. | `number` | `60` | no |
-| mcp\_server\_url | Upstream MCP server fronted by the gateway when enable\_mcp = true. | `string` | `"https://learn.microsoft.com/api/mcp"` | no |
 | model\_deployments | Model deployments created on the Foundry (AIServices) account, keyed by<br/>deployment name. Choose any models/formats/SKUs/capacities your region offers<br/>(model\_format defaults to OpenAI; set e.g. "Meta"/"Mistral" for those models).<br/>Keep sku\_name within deployment\_sku\_policy.allowed\_sku\_names if that policy is<br/>enabled. Concurrent deployments to one account can 409 transiently — re-apply<br/>or use -parallelism=1. | <pre>map(object({<br/>    model_name    = string<br/>    model_version = string<br/>    sku_name      = optional(string, "Standard")<br/>    capacity      = optional(number, 10)<br/>    model_format  = optional(string, "OpenAI")<br/>  }))</pre> | <pre>{<br/>  "gpt-4.1-mini": {<br/>    "capacity": 10,<br/>    "model_name": "gpt-4.1-mini",<br/>    "model_version": "2025-04-14",<br/>    "sku_name": "Standard"<br/>  },<br/>  "text-embedding-ada-002": {<br/>    "capacity": 50,<br/>    "model_name": "text-embedding-ada-002",<br/>    "model_version": "2",<br/>    "sku_name": "Standard"<br/>  }<br/>}</pre> | no |
 | name\_prefix | Short lowercase prefix for resource names (e.g. "aigw", "contoso-ai"). | `string` | `"aigw"` | no |
 | name\_suffix | Override the random 5-char suffix appended to most resource names. Set this for deterministic / standards-compliant names (some orgs forbid randomness in names). Leave null to generate one. | `string` | `null` | no |
@@ -293,7 +288,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | api\_center\_id | API Center service resource ID (null when enable\_api\_center = false). |
 | api\_center\_name | API Center service name (null when enable\_api\_center = false). |
 | apim\_gateway\_url | APIM gateway base URL. |
@@ -304,7 +299,7 @@ No modules.
 | application\_insights\_connection\_string | Application Insights connection string for consumer apps that want to correlate telemetry. |
 | application\_insights\_id | Application Insights resource ID (module-created or bring-your-own). |
 | demo\_clients | Demo client credentials per tier (only when create\_demo\_clients = true). Map of tier key -> { client\_id, client\_secret }. |
-| foundry\_account\_name | Foundry (AIServices) account name — needed by test/test-residency.sh. |
+| foundry\_account\_name | Foundry (AIServices) account name. |
 | foundry\_endpoint | Foundry account endpoint (private; resolvable only inside the VNet). |
 | foundry\_id | Foundry (AIServices) account resource ID. |
 | gateway\_app\_client\_id | Audience clients request tokens for (scope: <client\_id>/.default). |

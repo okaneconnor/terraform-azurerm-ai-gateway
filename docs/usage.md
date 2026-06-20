@@ -71,8 +71,7 @@ Integration **outputs** for peering / wiring the gateway into your estate:
 ## Get a token
 
 Run these from the directory you deployed the module in, with
-`create_demo_clients = true`. Replace `<repo>` with the path to a checkout of this
-module (the helper scripts live under its `test/`).
+`create_demo_clients = true` (the demo clients are a per-tier test identity).
 
 ```bash
 export TENANT_ID=$(terraform output -raw tenant_id)
@@ -80,13 +79,13 @@ export GATEWAY_APP_ID=$(terraform output -raw gateway_app_client_id)
 export CLIENT_ID=$(terraform output -json demo_clients | jq -r '."ai-sandbox".client_id')
 export CLIENT_SECRET=$(terraform output -json demo_clients | jq -r '."ai-sandbox".client_secret')
 
-TOKEN=$(<repo>/test/get-token.sh)
+# Client-credentials token. The scope is the gateway app's bare client-ID GUID +
+# /.default — NOT api://<guid>/.default (that needs a registered identifier URI and
+# yields AADSTS500011).
+TOKEN=$(curl -s -X POST "https://login.microsoftonline.com/$TENANT_ID/oauth2/v2.0/token" \
+  -d grant_type=client_credentials -d "client_id=$CLIENT_ID" \
+  -d "client_secret=$CLIENT_SECRET" -d "scope=$GATEWAY_APP_ID/.default" | jq -r .access_token)
 ```
-
-The script requests `scope=<gateway_app_client_id>/.default` from the Entra v2 token
-endpoint — the **bare client-ID GUID** form, *not* `api://<guid>/.default` (that form
-would require `api://<guid>` to be a registered identifier URI, which it is not; using
-it yields `AADSTS500011`).
 
 Then call the gateway:
 
@@ -109,40 +108,39 @@ curl -s -X POST "$GATEWAY_URL/openai/deployments/gpt-4.1-mini/chat/completions?a
 
 ## Tests
 
-**Module unit tests** (no Azure credentials — mocked providers), from a checkout of
-this module:
+**Unit tests** (no Azure credentials — mocked providers), from a checkout of this module:
 
 ```bash
 terraform init -backend=false && terraform test
 ```
 
-**Live tests** against a deployment with demo clients
-(`create_demo_clients = true`). Export the outputs from your deployment directory,
-then run the scripts from a checkout of this module:
+**Live smoke checks** against a real deployment with `create_demo_clients = true`.
+Export `$TOKEN`, `$GATEWAY_URL`, and `$GATEWAY_APP_ID` as shown in
+[Get a token](#get-a-token), then:
 
 ```bash
-# from your module deployment directory:
-export TENANT_ID=$(terraform output -raw tenant_id)
-export GATEWAY_APP_ID=$(terraform output -raw gateway_app_client_id)
-export GATEWAY_URL=$(terraform output -raw apim_gateway_url)
-export DEPLOYMENT=gpt-4.1-mini
-export CLIENT_ID=$(terraform output -json demo_clients | jq -r '."ai-sandbox".client_id')
-export CLIENT_SECRET=$(terraform output -json demo_clients | jq -r '."ai-sandbox".client_secret')
-export SANDBOX_CLIENT_ID=$CLIENT_ID SANDBOX_CLIENT_SECRET=$CLIENT_SECRET
-export PROD_CLIENT_ID=$(terraform output -json demo_clients | jq -r '."ai-production-standard".client_id')
-export PROD_CLIENT_SECRET=$(terraform output -json demo_clients | jq -r '."ai-production-standard".client_secret')
-export TOKEN=$(<repo>/test/get-token.sh)
-export RG=$(terraform output -raw resource_group_name)
-export FOUNDRY=$(terraform output -raw foundry_account_name)
+CHAT="$GATEWAY_URL/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2024-10-21"
+BODY='{"messages":[{"role":"user","content":"hello"}],"max_tokens":10}'
+
+# Auth — valid token 200, no token 401
+curl -s -o /dev/null -w "valid  %{http_code}\n" -X POST "$CHAT" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d "$BODY"
+curl -s -o /dev/null -w "none   %{http_code}\n" -X POST "$CHAT" -H "Content-Type: application/json" -d "$BODY"
+
+# Content safety — a harmful prompt is blocked (403)
+curl -s -o /dev/null -w "unsafe %{http_code}\n" -X POST "$CHAT" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
+  -d '{"messages":[{"role":"user","content":"<a clearly harmful prompt>"}],"max_tokens":10}'
+
+# Data residency — Azure Policy denies a non-regional model SKU
+az cognitiveservices account deployment create \
+  -g "$(terraform output -raw resource_group_name)" -n "$(terraform output -raw foundry_account_name)" \
+  --deployment-name probe --model-name gpt-4.1-mini --model-version 2025-04-14 \
+  --model-format OpenAI --sku-name GlobalStandard --sku-capacity 1   # expect RequestDisallowedByPolicy
 ```
 
-| Script | What it covers |
-|---|---|
-| `test/test-suite.sh` | Auth, content safety, cache hit, passthrough, abuse, rate limit |
-| `test/test-tiers.sh` | Tier separation (sandbox throttles, production doesn't) |
-| `test/test-cache.sh` | Semantic cache correctness + per-client isolation |
-| `test/test-residency.sh` | Deployment-SKU policy denies GlobalStandard |
-| `scripts/scan.sh` | Static security scan (tfsec / checkov; fails closed if neither installed) |
+Expected: valid `200`, no-token `401`, harmful `403`, SKU deployment denied. Repeating an
+identical prompt returns the same completion `id` (semantic-cache hit); a sandbox-tier
+client eventually returns `429` once its rate/token window is exhausted. The cache is
+partitioned per client (`azp`), so a second client never sees another's completion.
 
 Avoid running `test-tiers.sh` and `test-cache.sh` back-to-back — the tier test
 exhausts rate windows and the collateral throttling makes the cache test flaky.

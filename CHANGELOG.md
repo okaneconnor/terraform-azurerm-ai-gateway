@@ -26,12 +26,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once published
   (sensitive), `log_analytics_workspace_resource_id`, `log_analytics_workspace_guid`,
   `key_vault_id`, `key_vault_uri`, `api_center_id`.
 - Input validation: `tiers[*].app_role` charset (Entra app-role / XML-safe),
-  `mcp_server_url` must be `https://`, `apim_virtual_network_type` enum,
-  `apim_diagnostic` ranges, `name_suffix` charset.
+  `apim_virtual_network_type` enum, `apim_diagnostic` ranges, `name_suffix` charset.
 - terraform-docs config (`.terraform-docs.yml`) and generated Inputs/Outputs in the
-  README; per-example READMEs; this changelog.
+  README; this changelog.
 - Static analysis wired into the repo: `tfsec` + `checkov` (both run clean) via
-  `scripts/scan.sh`, a `.checkov.yaml` config, and a `.pre-commit-config.yaml`
+  a `.checkov.yaml` config and a `.pre-commit-config.yaml`
   (`fmt` → `validate` → `terraform-docs` → `tfsec` → `checkov`). Checkov false
   positives / by-design items are suppressed inline with documented
   `#checkov:skip=<ID>:<reason>` comments.

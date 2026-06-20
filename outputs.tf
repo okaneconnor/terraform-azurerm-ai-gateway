@@ -51,7 +51,7 @@ output "model_deployment_names" {
 }
 
 output "foundry_account_name" {
-  description = "Foundry (AIServices) account name — needed by test/test-residency.sh."
+  description = "Foundry (AIServices) account name."
   value       = azurerm_cognitive_account.foundry.name
 }
 

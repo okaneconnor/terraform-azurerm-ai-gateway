@@ -37,7 +37,7 @@ resource "azuread_service_principal" "gateway" {
 }
 
 # Optional demo clients — one per tier, each granted that tier's app role. Useful
-# for end-to-end testing (test/ scripts); off by default so real deployments
+# for end-to-end testing; off by default so real deployments
 # don't ship unused credentials.
 
 resource "azuread_application" "demo" {

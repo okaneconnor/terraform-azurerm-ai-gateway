@@ -35,7 +35,6 @@ Client app (Entra client-credentials)
 │    /speech        → Speech         (wildcard)│
 │    /language      → Language       (wildcard)│
 │    /docintel      → Document Intel.(wildcard)│
-│    /mytools       → Governed MCP (optional) │
 └───────────────────┬─────────────────────────┘
                     │  Private endpoints (VNet)
           ┌─────────┼──────────┐

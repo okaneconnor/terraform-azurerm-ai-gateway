@@ -21,22 +21,6 @@ rationale see [architecture.md](architecture.md).
   registered for the gateway's region display name; the module derives this from
   `var.location` automatically.
 
-## MCP governance (preview — off by default)
-
-APIM's MCP server support is **preview**, and provisioning a *passthrough* MCP server
-via ARM/Terraform is **not yet reliable** — the `azapi` resource deploys an API shell
-that does **not** route MCP requests (verified: 404 on the MCP paths). For that reason
-`enable_mcp` defaults to `false`.
-
-- **Reliable path today:** create the MCP server in the portal (APIs → MCP servers →
-  + Create MCP server → *Expose an existing MCP server*). The endpoint is
-  `https://<apim-gateway-url>/<base-path>/mcp`.
-- **Codified preview attempt:** `enable_mcp = true` deploys the azapi shape
-  (`mcp_server_url`) behind the Entra-JWT + IP-allow + rate-limit chain. Treat as
-  preview.
-- Either way, MCP servers are catalogued automatically in API Center via the
-  `apiSources` sync.
-
 ## A2A agent APIs (manual step)
 
 No stable ARM `apiType` exists for A2A agent import (portal-only as of 2026-06).
@@ -60,17 +44,17 @@ catalogue. Track the [APIM roadmap](https://aka.ms/apimroadmap).
 
 Main standing costs: APIM (Developer ~£40/mo; Premium materially more), Azure Managed
 Redis (smallest SKU, 24/7 — disable `semantic_cache` if unused), Content Safety
-per-call (every prompt), and per-token model usage. `terraform destroy` in the example
-directory when not in use.
+per-call (every prompt), and per-token model usage. `terraform destroy` your
+deployment when not in use.
 
 ## Linting & security scanning
 
 ```bash
 terraform fmt -recursive          # format
 terraform validate                # validate (after: terraform init -backend=false)
-terraform test                    # 20 plan-mode unit tests (mocked providers, no Azure creds)
+terraform test                    # plan-mode unit tests (mocked providers, no Azure creds)
 terraform-docs .                  # regenerate the Inputs/Outputs tables in the README
-bash scripts/scan.sh              # tfsec + checkov (fails closed if neither is installed)
+tfsec . && checkov -d .           # static analysis (or: pre-commit run -a)
 ```
 
 Install the tooling with `brew install terraform-docs tfsec checkov pre-commit`. A

@@ -505,16 +505,6 @@ run "rejects_bad_app_role_charset" {
   expect_failures = [var.tiers]
 }
 
-run "rejects_non_https_mcp_url" {
-  command = plan
-
-  variables {
-    mcp_server_url = "http://insecure.example.com/mcp"
-  }
-
-  expect_failures = [var.mcp_server_url]
-}
-
 run "rejects_invalid_internal_mode" {
   command = plan
 
