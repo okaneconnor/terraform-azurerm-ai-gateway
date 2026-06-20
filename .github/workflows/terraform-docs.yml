@@ -1,33 +1,30 @@
 name: terraform-docs
 
-# Read-only check that the README Inputs/Outputs block is current. Pinned
-# terraform-docs version so local `terraform-docs .` and CI produce identical output
-# (no gh-action bundled-version drift). Fails the PR if the block is stale — run
-# `terraform-docs .` locally and commit. Read-only, so it also works on fork PRs.
+# Keeps the README Inputs/Outputs block in sync with the variables/outputs using the
+# official terraform-docs action (no runtime install, no version to match locally).
+# It regenerates the block and commits the fix back to the PR branch, so the action is
+# the single source of truth. Note: git-push can't write to forked PR branches — fine
+# for same-repo PRs; switch to fail-on-diff if you start taking external contributions.
 on:
   pull_request:
 
 permissions:
-  contents: read
-
-env:
-  TERRAFORM_DOCS_VERSION: "0.24.0"
+  contents: write
 
 jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install terraform-docs (pinned)
-        run: |
-          curl -sSLo /tmp/td.tar.gz \
-            "https://github.com/terraform-docs/terraform-docs/releases/download/v${TERRAFORM_DOCS_VERSION}/terraform-docs-v${TERRAFORM_DOCS_VERSION}-linux-amd64.tar.gz"
-          tar -xzf /tmp/td.tar.gz -C /tmp terraform-docs
-          sudo install /tmp/terraform-docs /usr/local/bin/terraform-docs
-          terraform-docs --version
-      - name: Check README is up to date
-        run: |
-          terraform-docs markdown table --config .terraform-docs.yml \
-            --output-file README.md --output-mode inject .
-          git diff --exit-code -- README.md \
-            || { echo "::error::README terraform-docs block is stale — run 'terraform-docs .' and commit."; exit 1; }
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Render terraform-docs into README.md and push back to the PR branch
+        uses: terraform-docs/gh-actions@v1.4.1
+        with:
+          working-dir: .
+          config-file: .terraform-docs.yml
+          output-file: README.md
+          output-method: inject
+          git-push: "true"
+          git-commit-message: "docs: terraform-docs auto-update"
