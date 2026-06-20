@@ -1,4 +1,5 @@
 resource "azurerm_cognitive_account" "foundry" {
+  #checkov:skip=CKV2_AZURE_22:Uses Microsoft-managed keys by design; customer-managed key encryption (a KV key + identity wiring) is a consumer/org choice, not forced by this generic module.
   name                  = local.foundry_name
   location              = local.resource_group_location
   resource_group_name   = local.resource_group_name
