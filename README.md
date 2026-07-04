@@ -182,7 +182,7 @@ module "ai_gateway" {
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | terraform | >= 1.9.0 |
 | azapi | ~> 2.0 |
 | azuread | ~> 3.0 |
@@ -192,7 +192,7 @@ module "ai_gateway" {
 ## Providers
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | azapi | ~> 2.0 |
 | azuread | ~> 3.0 |
 | azurerm | ~> 4.74 |
@@ -205,7 +205,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-| ---- | ---- |
+|------|------|
 | [azapi_resource.api_center](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
 | [azapi_resource.apic_apim_source](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
 | [azapi_resource.apim_azuremonitor_logger](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
@@ -272,7 +272,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
+|------|-------------|------|---------|:--------:|
 | location | Azure region for all resources. Choose a region where your chat + embeddings models are available with the deployment SKUs you allow (see deployment\_sku\_policy). | `string` | n/a | yes |
 | model\_deployments | Model deployments created on the Foundry (AIServices) account, keyed by<br/>deployment name (the key becomes the /openai/deployments/<name> path segment).<br/>REQUIRED — the module ships no default model: Azure deprecates model versions<br/>over time and SKU/region availability varies, so choosing current models is the<br/>consumer's responsibility. If semantic\_cache is enabled, include the embeddings<br/>model named by semantic\_cache.embeddings\_deployment. model\_format defaults to<br/>OpenAI (set e.g. "Meta"/"Mistral" for those). Each sku\_name must be in<br/>deployment\_sku\_policy.allowed\_sku\_names while that policy is enabled. Concurrent<br/>deployments to one account can 409 transiently — re-apply or use -parallelism=1. | <pre>map(object({<br/>    model_name    = string<br/>    model_version = string<br/>    sku_name      = optional(string, "Standard")<br/>    capacity      = optional(number, 10)<br/>    model_format  = optional(string, "OpenAI")<br/>  }))</pre> | n/a | yes |
 | publisher\_email | APIM publisher email. | `string` | n/a | yes |
@@ -309,7 +309,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
 | api\_center\_id | API Center service resource ID (null when enable\_api\_center = false). |
 | api\_center\_name | API Center service name (null when enable\_api\_center = false). |
 | apim\_gateway\_url | APIM gateway base URL. |
