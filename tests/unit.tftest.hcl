@@ -48,6 +48,22 @@ variables {
   location        = "uksouth"
   publisher_name  = "Test"
   publisher_email = "test@example.com"
+
+  # model_deployments has no default (consumer must choose current models). A
+  # chat + embeddings pair on Standard SKUs satisfies the non-empty check, the
+  # semantic_cache embeddings-deployment default, and the SKU-allowlist default.
+  model_deployments = {
+    "chat" = {
+      model_name    = "chat-model"
+      model_version = "1"
+      sku_name      = "Standard"
+    }
+    "text-embedding-ada-002" = {
+      model_name    = "text-embedding-ada-002"
+      model_version = "2"
+      sku_name      = "Standard"
+    }
+  }
 }
 
 run "defaults" {
@@ -349,6 +365,68 @@ run "rejects_unknown_embeddings_deployment" {
   }
 
   expect_failures = [var.semantic_cache]
+}
+
+run "rejects_empty_model_deployments" {
+  command = plan
+
+  variables {
+    model_deployments = {}
+  }
+
+  expect_failures = [var.model_deployments]
+}
+
+# A model SKU outside the enabled allowlist is caught at plan (no more silent
+# apply-time Azure Policy denial). Embeddings key present so only the SKU check trips.
+run "rejects_model_sku_outside_allowlist" {
+  command = plan
+
+  variables {
+    model_deployments = {
+      "chat"                   = { model_name = "chat", model_version = "1", sku_name = "GlobalStandard" }
+      "text-embedding-ada-002" = { model_name = "text-embedding-ada-002", model_version = "2", sku_name = "Standard" }
+    }
+    # deployment_sku_policy default allows only "Standard".
+  }
+
+  expect_failures = [var.model_deployments]
+}
+
+# The real consumer case: a current model only offered on GlobalStandard, allow-listed.
+run "accepts_globalstandard_when_allowlisted" {
+  command = plan
+
+  variables {
+    model_deployments = {
+      "chat"                   = { model_name = "chat", model_version = "1", sku_name = "GlobalStandard" }
+      "text-embedding-ada-002" = { model_name = "text-embedding-ada-002", model_version = "2", sku_name = "Standard" }
+    }
+    deployment_sku_policy = { enabled = true, allowed_sku_names = ["Standard", "GlobalStandard"] }
+  }
+
+  assert {
+    condition     = length(azurerm_cognitive_deployment.model) == 2
+    error_message = "A GlobalStandard model must plan cleanly when its SKU is allow-listed."
+  }
+}
+
+# With the SKU policy off, the cross-validation is skipped (any SKU permitted).
+run "sku_policy_disabled_allows_any_sku" {
+  command = plan
+
+  variables {
+    model_deployments = {
+      "chat"                   = { model_name = "chat", model_version = "1", sku_name = "GlobalStandard" }
+      "text-embedding-ada-002" = { model_name = "text-embedding-ada-002", model_version = "2", sku_name = "Standard" }
+    }
+    deployment_sku_policy = { enabled = false }
+  }
+
+  assert {
+    condition     = length(azurerm_policy_definition.allowed_deployment_skus) == 0
+    error_message = "Disabling the SKU policy must skip the definition and its cross-validation."
+  }
 }
 
 # ── Bring-your-own / optionality ─────────────────────────────────────────────

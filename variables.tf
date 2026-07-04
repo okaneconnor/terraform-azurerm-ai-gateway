@@ -199,11 +199,14 @@ variable "foundry_account_sku" {
 variable "model_deployments" {
   description = <<-EOT
     Model deployments created on the Foundry (AIServices) account, keyed by
-    deployment name. Choose any models/formats/SKUs/capacities your region offers
-    (model_format defaults to OpenAI; set e.g. "Meta"/"Mistral" for those models).
-    Keep sku_name within deployment_sku_policy.allowed_sku_names if that policy is
-    enabled. Concurrent deployments to one account can 409 transiently — re-apply
-    or use -parallelism=1.
+    deployment name (the key becomes the /openai/deployments/<name> path segment).
+    REQUIRED — the module ships no default model: Azure deprecates model versions
+    over time and SKU/region availability varies, so choosing current models is the
+    consumer's responsibility. If semantic_cache is enabled, include the embeddings
+    model named by semantic_cache.embeddings_deployment. model_format defaults to
+    OpenAI (set e.g. "Meta"/"Mistral" for those). Each sku_name must be in
+    deployment_sku_policy.allowed_sku_names while that policy is enabled. Concurrent
+    deployments to one account can 409 transiently — re-apply or use -parallelism=1.
   EOT
   type = map(object({
     model_name    = string
@@ -212,19 +215,17 @@ variable "model_deployments" {
     capacity      = optional(number, 10)
     model_format  = optional(string, "OpenAI")
   }))
-  default = {
-    "gpt-4.1-mini" = {
-      model_name    = "gpt-4.1-mini"
-      model_version = "2025-04-14"
-      sku_name      = "Standard"
-      capacity      = 10
-    }
-    "text-embedding-ada-002" = {
-      model_name    = "text-embedding-ada-002"
-      model_version = "2"
-      sku_name      = "Standard"
-      capacity      = 50
-    }
+
+  validation {
+    condition     = length(var.model_deployments) > 0
+    error_message = "Provide at least one model deployment — this module ships no default model (Azure deprecates versions over time, so the choice is yours)."
+  }
+
+  validation {
+    condition = !var.deployment_sku_policy.enabled || alltrue([
+      for d in var.model_deployments : contains(var.deployment_sku_policy.allowed_sku_names, d.sku_name)
+    ])
+    error_message = "Every model deployment sku_name must be in deployment_sku_policy.allowed_sku_names while the SKU policy is enabled. Choose a model SKU in the allowlist, or add the SKU (note: Global*/DataZone* SKUs process data outside the deployment region — a residency trade-off)."
   }
 }
 

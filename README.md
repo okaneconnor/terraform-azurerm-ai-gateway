@@ -21,8 +21,9 @@ Licensed under the [MIT License](LICENSE).
   guardrail), API Center cataloguing, full Log Analytics / App Insights observability
   including per-request LLM token logs.
 - **Nothing hardcoded** — every SKU, size, capacity, region, name, threshold, and
-  toggle is a variable with a sensible default. Set only `location` + publisher info
-  for a full secure deployment; override anything else as needed.
+  toggle is a variable; most carry a sensible default. Set `location`, publisher info,
+  and your `model_deployments` (the module ships no default model — you choose current,
+  non-deprecating models for your region); override anything else as needed.
 - **Composable for landing zones** — bring your own resource group, VNet/subnets,
   private DNS zones, Log Analytics workspace, App Insights, or Entra gateway app, or
   let the module create them. Every optional component toggles independently.
@@ -59,6 +60,25 @@ module "ai_gateway" {
   location        = "uksouth"
   publisher_name  = "AI Platform Team"
   publisher_email = "platform@example.com"
+
+  # Required — the module ships no default model. Choose current, non-deprecating
+  # models for your region. gpt-5.4-mini is only offered on GlobalStandard, so the
+  # SKU allowlist below must permit it (GlobalStandard leaves the deployment region;
+  # use a Standard-SKU model to keep inference in-region).
+  model_deployments = {
+    "gpt-5.4-mini" = {
+      model_name    = "gpt-5.4-mini"
+      model_version = "2026-03-17"
+      sku_name      = "GlobalStandard"
+    }
+    "text-embedding-3-small" = {
+      model_name    = "text-embedding-3-small"
+      model_version = "1"
+      sku_name      = "Standard"
+    }
+  }
+  semantic_cache        = { embeddings_deployment = "text-embedding-3-small" }
+  deployment_sku_policy = { allowed_sku_names = ["Standard", "GlobalStandard"] }
 }
 ```
 
@@ -67,19 +87,20 @@ terraform init
 terraform apply -var subscription_id=<sub-id>   # APIM VNet provisioning takes ~30-45 min
 ```
 
-Those three inputs are the **only required ones** — every other knob is optional with a
-sensible default (see [Inputs](#inputs)), so this deploys the full secure stack. Once it
-is up, a client requests an Entra token (client-credentials, app-role gated) and calls
-the gateway. For getting a token, onboarding a team, and the end-to-end tests, see the
-**[usage guide](docs/usage.md)**.
+`location`, publisher info, and `model_deployments` are the required inputs — every
+other knob is optional with a sensible default (see [Inputs](#inputs)), so this deploys
+the full secure stack. Once it is up, a client requests an Entra token
+(client-credentials, app-role gated) and calls the gateway. For getting a token,
+onboarding a team, and the end-to-end tests, see the **[usage guide](docs/usage.md)**.
 
 > You need Entra permissions to create app registrations (or set `existing_gateway_app`
 > to bring your own). Terraform >= 1.9.
 
 ### Complete example
 
-A fuller configuration exercising the common knobs. Every argument below is optional
-with a sensible default — set only what you need to override. See the
+A fuller configuration exercising the common knobs. Apart from `model_deployments`
+(required), every argument below is optional with a sensible default — set only what
+you need to override. See the
 [Inputs](#inputs) reference for the full list (including bring-your-own / landing-zone
 inputs such as `existing_network`, `existing_resource_group_name`, and
 `existing_private_dns_zone_ids`).
@@ -161,7 +182,7 @@ module "ai_gateway" {
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | terraform | >= 1.9.0 |
 | azapi | ~> 2.0 |
 | azuread | ~> 3.0 |
@@ -171,7 +192,7 @@ module "ai_gateway" {
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | azapi | ~> 2.0 |
 | azuread | ~> 3.0 |
 | azurerm | ~> 4.74 |
@@ -184,7 +205,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [azapi_resource.api_center](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
 | [azapi_resource.apic_apim_source](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
 | [azapi_resource.apim_azuremonitor_logger](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
@@ -251,8 +272,9 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | location | Azure region for all resources. Choose a region where your chat + embeddings models are available with the deployment SKUs you allow (see deployment\_sku\_policy). | `string` | n/a | yes |
+| model\_deployments | Model deployments created on the Foundry (AIServices) account, keyed by<br/>deployment name (the key becomes the /openai/deployments/<name> path segment).<br/>REQUIRED — the module ships no default model: Azure deprecates model versions<br/>over time and SKU/region availability varies, so choosing current models is the<br/>consumer's responsibility. If semantic\_cache is enabled, include the embeddings<br/>model named by semantic\_cache.embeddings\_deployment. model\_format defaults to<br/>OpenAI (set e.g. "Meta"/"Mistral" for those). Each sku\_name must be in<br/>deployment\_sku\_policy.allowed\_sku\_names while that policy is enabled. Concurrent<br/>deployments to one account can 409 transiently — re-apply or use -parallelism=1. | <pre>map(object({<br/>    model_name    = string<br/>    model_version = string<br/>    sku_name      = optional(string, "Standard")<br/>    capacity      = optional(number, 10)<br/>    model_format  = optional(string, "OpenAI")<br/>  }))</pre> | n/a | yes |
 | publisher\_email | APIM publisher email. | `string` | n/a | yes |
 | publisher\_name | APIM publisher name (shown in the developer portal). | `string` | n/a | yes |
 | ai\_services | Cognitive Services exposed as passthrough APIs through the gateway, keyed by a<br/>short identifier. Add/remove/resize services freely — each entry creates the<br/>account (private, Entra-only), a private endpoint, an APIM backend + API with<br/>the standard policy chain (IP filter -> JWT -> rate limit -> managed identity).<br/>NOTE: content\_safety.enabled requires an entry whose kind is "ContentSafety". | <pre>map(object({<br/>    kind         = string<br/>    sku_name     = string<br/>    display_name = string<br/>    api_path     = string<br/>    short_name   = string # used in resource names; keep it brief<br/>  }))</pre> | <pre>{<br/>  "docintel": {<br/>    "api_path": "docintel",<br/>    "display_name": "Document Intelligence",<br/>    "kind": "FormRecognizer",<br/>    "short_name": "doci",<br/>    "sku_name": "S0"<br/>  },<br/>  "language": {<br/>    "api_path": "language",<br/>    "display_name": "Language",<br/>    "kind": "TextAnalytics",<br/>    "short_name": "lang",<br/>    "sku_name": "S"<br/>  },<br/>  "safety": {<br/>    "api_path": "contentsafety",<br/>    "display_name": "Content Safety",<br/>    "kind": "ContentSafety",<br/>    "short_name": "cs",<br/>    "sku_name": "S0"<br/>  },<br/>  "speech": {<br/>    "api_path": "speech",<br/>    "display_name": "Speech",<br/>    "kind": "SpeechServices",<br/>    "short_name": "spch",<br/>    "sku_name": "S0"<br/>  }<br/>}</pre> | no |
@@ -276,7 +298,6 @@ No modules.
 | key\_vault | Optional private Key Vault (RBAC, purge protection, private endpoint) for<br/>consumer workloads' secrets — the gateway itself stores nothing in it. Set<br/>enabled=false to skip. SKU / retention / purge-protection are tunable for org<br/>policy (e.g. premium for HSM-backed keys). | <pre>object({<br/>    enabled                    = optional(bool, true)<br/>    sku_name                   = optional(string, "standard")<br/>    soft_delete_retention_days = optional(number, 90)<br/>    purge_protection_enabled   = optional(bool, true)<br/>  })</pre> | `{}` | no |
 | log\_analytics\_sku | SKU for the module-created Log Analytics workspace (ignored when existing\_log\_analytics\_workspace\_id is set). | `string` | `"PerGB2018"` | no |
 | log\_retention\_days | Retention for the module-created Log Analytics workspace. | `number` | `30` | no |
-| model\_deployments | Model deployments created on the Foundry (AIServices) account, keyed by<br/>deployment name. Choose any models/formats/SKUs/capacities your region offers<br/>(model\_format defaults to OpenAI; set e.g. "Meta"/"Mistral" for those models).<br/>Keep sku\_name within deployment\_sku\_policy.allowed\_sku\_names if that policy is<br/>enabled. Concurrent deployments to one account can 409 transiently — re-apply<br/>or use -parallelism=1. | <pre>map(object({<br/>    model_name    = string<br/>    model_version = string<br/>    sku_name      = optional(string, "Standard")<br/>    capacity      = optional(number, 10)<br/>    model_format  = optional(string, "OpenAI")<br/>  }))</pre> | <pre>{<br/>  "gpt-4.1-mini": {<br/>    "capacity": 10,<br/>    "model_name": "gpt-4.1-mini",<br/>    "model_version": "2025-04-14",<br/>    "sku_name": "Standard"<br/>  },<br/>  "text-embedding-ada-002": {<br/>    "capacity": 50,<br/>    "model_name": "text-embedding-ada-002",<br/>    "model_version": "2",<br/>    "sku_name": "Standard"<br/>  }<br/>}</pre> | no |
 | name\_prefix | Short lowercase prefix for resource names (e.g. "aigw", "contoso-ai"). | `string` | `"aigw"` | no |
 | name\_suffix | Override the random 5-char suffix appended to most resource names. Set this for deterministic / standards-compliant names (some orgs forbid randomness in names). Leave null to generate one. | `string` | `null` | no |
 | network | VNet and subnet CIDRs for the module-created network. Ignored when existing\_network is set. APIM is injected into the apim subnet; all backends are reached via private endpoints in the pe subnet. | <pre>object({<br/>    vnet_cidr        = optional(string, "10.90.0.0/16")<br/>    apim_subnet_cidr = optional(string, "10.90.1.0/24")<br/>    pe_subnet_cidr   = optional(string, "10.90.2.0/24")<br/>  })</pre> | `{}` | no |
@@ -288,7 +309,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | api\_center\_id | API Center service resource ID (null when enable\_api\_center = false). |
 | api\_center\_name | API Center service name (null when enable\_api\_center = false). |
 | apim\_gateway\_url | APIM gateway base URL. |

@@ -7,8 +7,10 @@ the full input/output reference see the generated tables in the
 
 ## Deploy
 
-Call the module from your own root configuration. The minimum is `location` plus
-publisher info — everything else is an optional variable with a sensible default.
+Call the module from your own root configuration. The required inputs are `location`,
+publisher info, and `model_deployments` — everything else is optional with a sensible
+default. The module ships **no default model**: Azure deprecates model versions over
+time, so you choose current models for your region.
 
 ```hcl
 # main.tf
@@ -26,6 +28,25 @@ module "ai_gateway" {
   publisher_name  = "AI Platform Team"
   publisher_email = "platform@example.com"
 
+  # Required — pick current, non-deprecating models. Check availability/SKUs with:
+  #   az cognitiveservices account list-models -n <foundry-acct> -g <rg>
+  # gpt-5.4-mini is only offered on GlobalStandard, so the SKU allowlist must permit
+  # it (GlobalStandard leaves the region; use a Standard-SKU model to stay in-region).
+  model_deployments = {
+    "gpt-5.4-mini" = {
+      model_name    = "gpt-5.4-mini"
+      model_version = "2026-03-17"
+      sku_name      = "GlobalStandard"
+    }
+    "text-embedding-3-small" = {
+      model_name    = "text-embedding-3-small"
+      model_version = "1"
+      sku_name      = "Standard"
+    }
+  }
+  semantic_cache        = { embeddings_deployment = "text-embedding-3-small" }
+  deployment_sku_policy = { allowed_sku_names = ["Standard", "GlobalStandard"] }
+
   # Optional — create one demo client app (with secret) per tier for end-to-end
   # testing. Leave false (default) for real deployments.
   create_demo_clients = true
@@ -40,6 +61,21 @@ terraform apply -var subscription_id=<sub-id>   # APIM VNet provisioning takes ~
 > Providers are configured by the **caller** (above) — the module itself only pins
 > `required_providers`. You need Entra permissions to create app registrations (or
 > set `existing_gateway_app`).
+
+### Internal VNet mode (private gateway)
+
+With `apim_virtual_network_type = "Internal"` the gateway has **no public endpoint** —
+it is reachable only at a private VIP inside the VNet, and **DNS is yours to wire**. The
+module creates private DNS zones for the backends (Foundry, Key Vault, …) but not for
+the gateway hostname, so `apim_gateway_url` will not resolve for anyone until you either:
+
+- create an A record for the gateway host → the APIM private IP
+  (`az apim show … --query privateIpAddresses`) in your own private DNS zone
+  (`azure-api.net`) linked to the VNet, or
+- front the gateway with Application Gateway / a WAF for ingress.
+
+For a quick test from inside the VNet without DNS, resolve the host manually, e.g.
+`curl --resolve <host>:443:<private-ip> https://<host>/openai/...`.
 
 ## Bring-your-own (landing-zone adoption)
 
@@ -91,7 +127,7 @@ Then call the gateway:
 
 ```bash
 GATEWAY_URL=$(terraform output -raw apim_gateway_url)
-curl -s -X POST "$GATEWAY_URL/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2024-10-21" \
+curl -s -X POST "$GATEWAY_URL/openai/deployments/gpt-5.4-mini/chat/completions?api-version=2024-10-21" \
   -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
   -d '{"messages":[{"role":"user","content":"hello"}],"max_tokens":10}'
 ```
@@ -119,7 +155,7 @@ Export `$TOKEN`, `$GATEWAY_URL`, and `$GATEWAY_APP_ID` as shown in
 [Get a token](#get-a-token), then:
 
 ```bash
-CHAT="$GATEWAY_URL/openai/deployments/gpt-4.1-mini/chat/completions?api-version=2024-10-21"
+CHAT="$GATEWAY_URL/openai/deployments/gpt-5.4-mini/chat/completions?api-version=2024-10-21"
 BODY='{"messages":[{"role":"user","content":"hello"}],"max_tokens":10}'
 
 # Auth — valid token 200, no token 401
@@ -130,11 +166,15 @@ curl -s -o /dev/null -w "none   %{http_code}\n" -X POST "$CHAT" -H "Content-Type
 curl -s -o /dev/null -w "unsafe %{http_code}\n" -X POST "$CHAT" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
   -d '{"messages":[{"role":"user","content":"<a clearly harmful prompt>"}],"max_tokens":10}'
 
-# Data residency — Azure Policy denies a non-regional model SKU
+# Data residency — Azure Policy denies an out-of-band deployment on a SKU outside
+# your allowed_sku_names (the module's cross-validation already blocks it in Terraform;
+# this proves the runtime backstop for portal/CLI deployments). Use any SKU NOT in your
+# allowlist — here GlobalBatch, which the example allowlist ["Standard","GlobalStandard"]
+# denies.
 az cognitiveservices account deployment create \
   -g "$(terraform output -raw resource_group_name)" -n "$(terraform output -raw foundry_account_name)" \
-  --deployment-name probe --model-name gpt-4.1-mini --model-version 2025-04-14 \
-  --model-format OpenAI --sku-name GlobalStandard --sku-capacity 1   # expect RequestDisallowedByPolicy
+  --deployment-name probe --model-name gpt-5.4-mini --model-version 2026-03-17 \
+  --model-format OpenAI --sku-name GlobalBatch --sku-capacity 1   # expect RequestDisallowedByPolicy
 ```
 
 Expected: valid `200`, no-token `401`, harmful `403`, SKU deployment denied. Repeating an
