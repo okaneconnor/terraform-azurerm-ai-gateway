@@ -6,8 +6,27 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once published
 
 ## [Unreleased]
 
+## [1.0.0] — _registry candidate_
+
+First published, Semantic-Versioned release.
+
+### Breaking
+
+- **`model_deployments` is now REQUIRED** (no default). The module intentionally
+  ships no default model because Azure deprecates model versions over time —
+  callers must pin the model + version they hold quota for. Existing configs that
+  relied on the removed default must set `model_deployments` explicitly.
+
 ### Added
 
+- `content_safety.enforce_on_completions` — screen model **outputs** (completions)
+  with content safety / Prompt Shield, not just inbound prompts.
+- **Per-tier token quota**: `tiers[*].token_quota` with a `token_quota_period`, for
+  daily/monthly spend caps per tier.
+- **APIM TLS floor** (`security` block) that disables SSL3 / TLS1.0 / TLS1.1 and the
+  3DES cipher on the gateway.
+- Cross-validation that every `model_deployments[*]` SKU falls within the enabled
+  `deployment_sku_policy` allowlist — fails at **plan** time, not apply.
 - **Bring-your-own composability** for landing-zone adoption — all optional:
   `existing_resource_group_name`, `existing_network` (VNet + APIM/PE subnets),
   `existing_private_dns_zone_ids` (hub-managed DNS),
@@ -39,6 +58,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once published
 
 ### Changed
 
+- **Semantic caching now defaults to OFF** (opt-in via `semantic_cache.enabled`).
+  It requires Azure Managed Redis (RediSearch) to be available in-region, so the
+  safe default is disabled.
 - `enable_key_vault` (bool) replaced by the `key_vault` object (`enabled` + tuning).
 - Output `log_analytics_workspace_id` split into `log_analytics_workspace_resource_id`
   (ARM id) and `log_analytics_workspace_guid` (customer GUID for KQL).
@@ -48,6 +70,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once published
 
 ### Fixed
 
+- Content-safety embeddings check is now anchored to the request **path suffix**
+  (was an unanchored substring match, so a deployment named `embeddings` could be
+  used to bypass Prompt Shield).
 - Content safety now runs **before** the semantic cache, so cache hits are still
   screened by Prompt Shield (previously cache hits could bypass screening).
 - Per-tier policies render from `var.tiers` so a third+ tier is admitted by the JWT

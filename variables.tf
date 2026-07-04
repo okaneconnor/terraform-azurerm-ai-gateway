@@ -366,13 +366,16 @@ variable "content_safety" {
 variable "semantic_cache" {
   description = <<-EOT
     Semantic caching of LLM completions in Azure Managed Redis (RediSearch),
-    partitioned per client app. score_threshold: lower = stricter similarity.
-    embeddings_deployment must name a key in model_deployments (an embeddings
-    model used to vectorise prompts). Set enabled=false to skip Redis entirely;
-    set high_availability=true for a production (replicated) cache.
+    partitioned per client app. Caching is OPT-IN: it requires an Azure Managed
+    Redis (RediSearch) instance that must be available in your region
+    (provisioning was observed to fail in some regions), so it defaults off. Set
+    enabled=true to use it, and include an embeddings model in model_deployments
+    matching embeddings_deployment (used to vectorise prompts). score_threshold:
+    lower = stricter similarity. Set high_availability=true for a production
+    (replicated) cache.
   EOT
   type = object({
-    enabled               = optional(bool, true)
+    enabled               = optional(bool, false)
     redis_sku_name        = optional(string, "Balanced_B0")
     high_availability     = optional(bool, false)
     score_threshold       = optional(number, 0.05)

@@ -243,6 +243,7 @@ run "full_stack_shape" {
 
   variables {
     create_demo_clients = true
+    semantic_cache      = { enabled = true }
     tiers = {
       "ai-sandbox" = {
         display_name      = "AI Sandbox"
@@ -323,6 +324,18 @@ run "full_stack_shape" {
   }
 }
 
+# Semantic caching is opt-in: at defaults the Redis cache is never provisioned
+# (Azure Managed Redis failed to provision in live testing, so a default apply
+# must not depend on it).
+run "semantic_cache_default_off" {
+  command = plan
+
+  assert {
+    condition     = length(azurerm_managed_redis.cache) == 0
+    error_message = "semantic_cache must default off (no Redis at defaults)."
+  }
+}
+
 run "rejects_substring_roles" {
   command = plan
 
@@ -361,7 +374,7 @@ run "rejects_unknown_embeddings_deployment" {
   command = plan
 
   variables {
-    semantic_cache = { embeddings_deployment = "nope" }
+    semantic_cache = { enabled = true, embeddings_deployment = "nope" }
   }
 
   expect_failures = [var.semantic_cache]

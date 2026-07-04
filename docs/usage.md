@@ -44,7 +44,10 @@ module "ai_gateway" {
       sku_name      = "Standard"
     }
   }
-  semantic_cache        = { embeddings_deployment = "text-embedding-3-small" }
+  # Semantic caching is opt-in (enabled=false by default) — it needs an Azure
+  # Managed Redis (RediSearch) instance available in your region. Set enabled=true
+  # to turn it on.
+  semantic_cache        = { enabled = true, embeddings_deployment = "text-embedding-3-small" }
   deployment_sku_policy = { allowed_sku_names = ["Standard", "GlobalStandard"] }
 
   # Optional — create one demo client app (with secret) per tier for end-to-end

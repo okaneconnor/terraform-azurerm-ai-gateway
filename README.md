@@ -178,11 +178,41 @@ module "ai_gateway" {
 | [docs/usage.md](docs/usage.md) | Deploy, bring-your-own / landing-zone adoption, get a token, onboard a team, live tests |
 | [docs/operations.md](docs/operations.md) | Deployment gotchas, A2A agents, production hardening, cost, linting & scanning |
 
+## Known limitations
+
+This module is intentionally scoped. The following are known, deliberate gaps —
+understand them before adopting it for production:
+
+- **Single region only.** Every resource is created in one `location`; there is
+  no multi-region APIM and no per-service region override.
+- **Single backend.** The Foundry backend pool has exactly one member. There is
+  no load-balanced multi-backend and no PTU-to-PAYG spillover, so Microsoft's
+  headline scaling pattern is not implemented.
+- **Surface scope.** Only the Azure OpenAI `/openai` surface is fronted.
+  Non-OpenAI model formats (Meta/Mistral/Cohere via the `/models` inference
+  API), the newer `/responses` API, and Agents/MCP are not exposed. The imported
+  OpenAPI spec is pinned to `2024-10-21`.
+- **Semantic cache.** Caching is opt-in and requires Azure Managed Redis
+  (RediSearch) to be available in your region. Provisioning was observed to fail
+  in some regions, and the path is not validated end-to-end in all regions.
+- **Key Vault data-plane.** Human/app secret access is documented (see the note
+  in `keyvault.tf`) but not implemented. The vault is RBAC-authorized and
+  private, so wire up the data-plane role assignments yourself.
+- **Model/SKU/region interplay.** You choose the current models (there is no
+  default). In some regions the current GA chat models are only offered on
+  `GlobalStandard` (out-of-region processing), while the SKU policy default
+  allows `Standard` only — align the allowlist deliberately.
+- **Backend capacity vs tiers.** Size your model-deployment capacity at or above
+  your top tier's rate limit. Otherwise the shared backend caps bursts equally
+  across tiers and masks the tier differentiation you configured.
+- **APIM Developer SKU.** The Developer SKU has no SLA and no availability
+  zones; use `Premium_N` for production.
+
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | terraform | >= 1.9.0 |
 | azapi | ~> 2.0 |
 | azuread | ~> 3.0 |
@@ -192,7 +222,7 @@ module "ai_gateway" {
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | azapi | ~> 2.0 |
 | azuread | ~> 3.0 |
 | azurerm | ~> 4.74 |
@@ -205,7 +235,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [azapi_resource.api_center](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
 | [azapi_resource.apic_apim_source](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
 | [azapi_resource.apim_azuremonitor_logger](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
@@ -272,7 +302,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | location | Azure region for all resources. Choose a region where your chat + embeddings models are available with the deployment SKUs you allow (see deployment\_sku\_policy). | `string` | n/a | yes |
 | model\_deployments | Model deployments created on the Foundry (AIServices) account, keyed by<br/>deployment name (the key becomes the /openai/deployments/<name> path segment).<br/>REQUIRED — the module ships no default model: Azure deprecates model versions<br/>over time and SKU/region availability varies, so choosing current models is the<br/>consumer's responsibility. If semantic\_cache is enabled, include the embeddings<br/>model named by semantic\_cache.embeddings\_deployment. model\_format defaults to<br/>OpenAI (set e.g. "Meta"/"Mistral" for those). Each sku\_name must be in<br/>deployment\_sku\_policy.allowed\_sku\_names while that policy is enabled. Concurrent<br/>deployments to one account can 409 transiently — re-apply or use -parallelism=1. | <pre>map(object({<br/>    model_name    = string<br/>    model_version = string<br/>    sku_name      = optional(string, "Standard")<br/>    capacity      = optional(number, 10)<br/>    model_format  = optional(string, "OpenAI")<br/>  }))</pre> | n/a | yes |
 | publisher\_email | APIM publisher email. | `string` | n/a | yes |
@@ -302,14 +332,14 @@ No modules.
 | name\_suffix | Override the random 5-char suffix appended to most resource names. Set this for deterministic / standards-compliant names (some orgs forbid randomness in names). Leave null to generate one. | `string` | `null` | no |
 | network | VNet and subnet CIDRs for the module-created network. Ignored when existing\_network is set. APIM is injected into the apim subnet; all backends are reached via private endpoints in the pe subnet. | <pre>object({<br/>    vnet_cidr        = optional(string, "10.90.0.0/16")<br/>    apim_subnet_cidr = optional(string, "10.90.1.0/24")<br/>    pe_subnet_cidr   = optional(string, "10.90.2.0/24")<br/>  })</pre> | `{}` | no |
 | rate\_limit\_renewal\_seconds | Fixed-window length for the per-tier request rate limit. | `number` | `60` | no |
-| semantic\_cache | Semantic caching of LLM completions in Azure Managed Redis (RediSearch),<br/>partitioned per client app. score\_threshold: lower = stricter similarity.<br/>embeddings\_deployment must name a key in model\_deployments (an embeddings<br/>model used to vectorise prompts). Set enabled=false to skip Redis entirely;<br/>set high\_availability=true for a production (replicated) cache. | <pre>object({<br/>    enabled               = optional(bool, true)<br/>    redis_sku_name        = optional(string, "Balanced_B0")<br/>    high_availability     = optional(bool, false)<br/>    score_threshold       = optional(number, 0.05)<br/>    duration_seconds      = optional(number, 120)<br/>    embeddings_deployment = optional(string, "text-embedding-ada-002")<br/>  })</pre> | `{}` | no |
+| semantic\_cache | Semantic caching of LLM completions in Azure Managed Redis (RediSearch),<br/>partitioned per client app. Caching is OPT-IN: it requires an Azure Managed<br/>Redis (RediSearch) instance that must be available in your region<br/>(provisioning was observed to fail in some regions), so it defaults off. Set<br/>enabled=true to use it, and include an embeddings model in model\_deployments<br/>matching embeddings\_deployment (used to vectorise prompts). score\_threshold:<br/>lower = stricter similarity. Set high\_availability=true for a production<br/>(replicated) cache. | <pre>object({<br/>    enabled               = optional(bool, false)<br/>    redis_sku_name        = optional(string, "Balanced_B0")<br/>    high_availability     = optional(bool, false)<br/>    score_threshold       = optional(number, 0.05)<br/>    duration_seconds      = optional(number, 120)<br/>    embeddings_deployment = optional(string, "text-embedding-ada-002")<br/>  })</pre> | `{}` | no |
 | tags | Tags applied to all taggable resources. | `map(string)` | `{}` | no |
 | tiers | Self-service consumption tiers (keyless model: limits keyed by the caller's<br/>Entra client app id). Each tier becomes an Entra app role on the gateway app<br/>AND a branch in the rate/token-limit policies, so adding an entry here is the<br/>complete change. Tokens-per-minute also bounds spend per client.<br/>The JWT policy admits only tokens carrying one of these app roles; when a<br/>client holds several, the highest tokens\_per\_minute tier wins. | <pre>map(object({<br/>    display_name       = string<br/>    app_role           = string<br/>    tokens_per_minute  = number<br/>    rate_limit_calls   = number<br/>    token_quota        = optional(number)<br/>    token_quota_period = optional(string, "Monthly")<br/>  }))</pre> | <pre>{<br/>  "ai-production-standard": {<br/>    "app_role": "AI.Gateway.Production",<br/>    "display_name": "AI Production Standard",<br/>    "rate_limit_calls": 120,<br/>    "tokens_per_minute": 150000<br/>  },<br/>  "ai-sandbox": {<br/>    "app_role": "AI.Gateway.Sandbox",<br/>    "display_name": "AI Sandbox",<br/>    "rate_limit_calls": 30,<br/>    "tokens_per_minute": 20000<br/>  }<br/>}</pre> | no |
 
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | api\_center\_id | API Center service resource ID (null when enable\_api\_center = false). |
 | api\_center\_name | API Center service name (null when enable\_api\_center = false). |
 | apim\_gateway\_url | APIM gateway base URL. |
