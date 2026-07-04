@@ -290,7 +290,7 @@ variable "tiers" {
     error_message = "Each tier token_quota_period must be one of Hourly, Daily, Weekly, Monthly, Yearly (llm-token-limit token-quota-period)."
   }
   validation {
-    condition     = alltrue([for t in var.tiers : t.token_quota == null || t.token_quota > 0])
+    condition     = alltrue([for t in var.tiers : t.token_quota == null ? true : t.token_quota > 0])
     error_message = "Each tier token_quota, when set, must be greater than 0."
   }
 }
