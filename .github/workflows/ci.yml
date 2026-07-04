@@ -54,6 +54,9 @@ jobs:
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
           working_directory: .
+          # Authenticate the release-binary download so it isn't anonymously
+          # rate-limited by the GitHub API (intermittent 403 on shared runners).
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: checkov
         uses: bridgecrewio/checkov-action@v12
         with:
