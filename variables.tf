@@ -241,10 +241,12 @@ variable "tiers" {
     client holds several, the highest tokens_per_minute tier wins.
   EOT
   type = map(object({
-    display_name      = string
-    app_role          = string
-    tokens_per_minute = number
-    rate_limit_calls  = number
+    display_name       = string
+    app_role           = string
+    tokens_per_minute  = number
+    rate_limit_calls   = number
+    token_quota        = optional(number)
+    token_quota_period = optional(string, "Monthly")
   }))
   default = {
     "ai-sandbox" = {
@@ -282,6 +284,14 @@ variable "tiers" {
       ]
     ]))
     error_message = "No tier's app_role may be a substring of another's (e.g. \"AI.Premium\" and \"AI.Premium2\") — the policy role check is a substring match on the comma-joined roles claim."
+  }
+  validation {
+    condition     = alltrue([for t in var.tiers : contains(["Hourly", "Daily", "Weekly", "Monthly", "Yearly"], t.token_quota_period)])
+    error_message = "Each tier token_quota_period must be one of Hourly, Daily, Weekly, Monthly, Yearly (llm-token-limit token-quota-period)."
+  }
+  validation {
+    condition     = alltrue([for t in var.tiers : t.token_quota == null || t.token_quota > 0])
+    error_message = "Each tier token_quota, when set, must be greater than 0."
   }
 }
 
@@ -343,11 +353,12 @@ variable "ai_services" {
 # ── AI gateway policies ──────────────────────────────────────────────────────
 
 variable "content_safety" {
-  description = "Prompt screening via llm-content-safety (+ Prompt Shield). Runs BEFORE the semantic cache so every prompt is screened, including ones answered from cache. Requires an ai_services entry of kind ContentSafety."
+  description = "Prompt screening via llm-content-safety (+ Prompt Shield). Runs BEFORE the semantic cache so every prompt is screened, including ones answered from cache. Requires an ai_services entry of kind ContentSafety. Set enforce_on_completions=true to ALSO screen model OUTPUTS (completions): non-streaming violations return 403; for streaming responses the handler buffers events and cuts the connection on a violation (no 403)."
   type = object({
-    enabled            = optional(bool, true)
-    shield_prompt      = optional(bool, true)
-    category_threshold = optional(number, 4) # 0-7; blocks at >= threshold severity
+    enabled                = optional(bool, true)
+    shield_prompt          = optional(bool, true)
+    category_threshold     = optional(number, 4) # 0-7; blocks at >= threshold severity
+    enforce_on_completions = optional(bool, false)
   })
   default = {}
 }

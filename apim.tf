@@ -12,6 +12,18 @@ resource "azurerm_api_management" "apim" {
     type = "SystemAssigned"
   }
 
+  # TLS hardening: reject SSL3 / TLS 1.0 / TLS 1.1 and 3DES on both frontend and backend.
+  security {
+    backend_ssl30_enabled  = false
+    backend_tls10_enabled  = false
+    backend_tls11_enabled  = false
+    frontend_ssl30_enabled = false
+    frontend_tls10_enabled = false
+    frontend_tls11_enabled = false
+
+    triple_des_ciphers_enabled = false
+  }
+
   virtual_network_type = var.apim_virtual_network_type
   virtual_network_configuration {
     subnet_id = local.apim_subnet_id

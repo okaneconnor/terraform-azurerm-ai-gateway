@@ -592,3 +592,91 @@ run "rejects_invalid_internal_mode" {
 
   expect_failures = [var.apim_virtual_network_type]
 }
+
+# ── Production hardening: output content safety, token quota, TLS floor ───────
+
+run "content_safety_completions_default_off" {
+  command = plan
+
+  assert {
+    condition     = strcontains(azurerm_api_management_policy_fragment.content_safety["this"].value, "enforce-on-completions=\"false\"")
+    error_message = "By default content safety must NOT enforce on completions (enforce-on-completions=\"false\")."
+  }
+}
+
+run "content_safety_completions_enabled" {
+  command = plan
+
+  variables {
+    content_safety = { enforce_on_completions = true }
+  }
+
+  assert {
+    condition     = strcontains(azurerm_api_management_policy_fragment.content_safety["this"].value, "enforce-on-completions=\"true\"")
+    error_message = "content_safety.enforce_on_completions=true must render enforce-on-completions=\"true\"."
+  }
+}
+
+run "tier_token_quota_rendered" {
+  command = plan
+
+  variables {
+    tiers = {
+      "ai-sandbox" = {
+        display_name       = "AI Sandbox"
+        app_role           = "AI.Gateway.Sandbox"
+        tokens_per_minute  = 20000
+        rate_limit_calls   = 30
+        token_quota        = 500000
+        token_quota_period = "Daily"
+      }
+    }
+  }
+
+  # Rendered attributes AND their spacing must be correct (the ~} trim-marker bug
+  # that stripped inter-attribute spaces would produce malformed policy XML here).
+  assert {
+    condition     = strcontains(azurerm_api_management_policy_fragment.tier_tokens.value, "tokens-per-minute=\"20000\" token-quota=\"500000\" token-quota-period=\"Daily\" estimate-prompt-tokens=")
+    error_message = "A tier with token_quota must render well-formed token-quota / token-quota-period with correct attribute spacing."
+  }
+}
+
+run "default_tiers_no_token_quota" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      !strcontains(azurerm_api_management_policy_fragment.tier_tokens.value, "token-quota"),
+      # default render keeps the single space between tokens-per-minute and estimate-prompt-tokens
+      strcontains(azurerm_api_management_policy_fragment.tier_tokens.value, "tokens-per-minute=\"20000\" estimate-prompt-tokens="),
+    ])
+    error_message = "Default tiers (no token_quota) must render no token-quota attribute and preserve attribute spacing."
+  }
+}
+
+run "rejects_invalid_token_quota_period" {
+  command = plan
+
+  variables {
+    tiers = {
+      a = { display_name = "A", app_role = "AI.Gateway.Sandbox", tokens_per_minute = 1000, rate_limit_calls = 10, token_quota = 1000, token_quota_period = "Minutely" }
+    }
+  }
+
+  expect_failures = [var.tiers]
+}
+
+run "apim_tls_hardened" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      azurerm_api_management.apim.security[0].frontend_tls10_enabled == false,
+      azurerm_api_management.apim.security[0].frontend_tls11_enabled == false,
+      azurerm_api_management.apim.security[0].backend_tls10_enabled == false,
+      azurerm_api_management.apim.security[0].backend_tls11_enabled == false,
+      azurerm_api_management.apim.security[0].triple_des_ciphers_enabled == false,
+    ])
+    error_message = "APIM must reject TLS 1.0/1.1 and 3DES on both frontend and backend."
+  }
+}

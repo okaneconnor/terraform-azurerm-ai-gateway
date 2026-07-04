@@ -6,7 +6,7 @@
   <choose>
 %{ for t in tiers ~}
     <when condition="@(((Jwt)context.Variables[&quot;entra-jwt&quot;]).Claims.GetValueOrDefault(&quot;roles&quot;,&quot;&quot;).Contains(&quot;${t.app_role}&quot;))">
-      <llm-token-limit tokens-per-minute="${t.tokens_per_minute}" estimate-prompt-tokens="false" counter-key="@((string)context.Variables[&quot;caller-app-id&quot;])" />
+      <llm-token-limit tokens-per-minute="${t.tokens_per_minute}"%{ if t.token_quota != null } token-quota="${t.token_quota}" token-quota-period="${t.token_quota_period}"%{ endif } estimate-prompt-tokens="false" counter-key="@((string)context.Variables[&quot;caller-app-id&quot;])" />
     </when>
 %{ endfor ~}
     <otherwise>
