@@ -12,9 +12,14 @@
     <!-- Embeddings requests carry no chat messages: content safety on them is
          undefined behaviour and a cache lookup can never hit — skip both. The
          check is INVERTED (skip only /embeddings) so anything else stays
-         screened by default (fail closed). -->
+         screened by default (fail closed). Match the path SUFFIX, not a
+         substring: the Azure OpenAI embeddings operation always ends in
+         "/embeddings" (the api-version is a query string, excluded from Path),
+         so EndsWith avoids a deployment named "embeddings" — path
+         /openai/deployments/embeddings/chat/completions — sneaking chat
+         completions past Prompt Shield via an unanchored Contains match. -->
     <choose>
-      <when condition="@(!context.Request.OriginalUrl.Path.Contains(&quot;/embeddings&quot;))">
+      <when condition="@(!context.Request.OriginalUrl.Path.EndsWith(&quot;/embeddings&quot;))">
 %{ if content_safety_enabled ~}
         <!-- Screens EVERY prompt — deliberately placed before the semantic cache
              so cache hits cannot bypass Prompt Shield. -->
