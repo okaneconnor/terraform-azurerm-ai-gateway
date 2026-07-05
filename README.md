@@ -55,7 +55,8 @@ provider "azapi" {}
 
 # main.tf
 module "ai_gateway" {
-  source = "github.com/okaneconnor/ai-gateway" # pin to a release for production: ?ref=v1.0.0
+  source  = "okaneconnor/ai-gateway/azurerm"
+  version = "~> 1.0"
 
   location        = "uksouth"
   publisher_name  = "AI Platform Team"
@@ -111,7 +112,8 @@ inputs such as `existing_network`, `existing_resource_group_name`, and
 
 ```hcl
 module "ai_gateway" {
-  source = "github.com/okaneconnor/ai-gateway"
+  source  = "okaneconnor/ai-gateway/azurerm"
+  version = "~> 1.0"
 
   location        = var.location
   name_prefix     = var.name_prefix

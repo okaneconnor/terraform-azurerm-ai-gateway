@@ -29,7 +29,8 @@ provider "azapi" {}
 
 module "ai_gateway" {
   # Local path for this in-repo example. When consuming the published module use:
-  #   source = "github.com/okaneconnor/ai-gateway?ref=v1.0.0"
+  #   source  = "okaneconnor/ai-gateway/azurerm"
+  #   version = "~> 1.0"
   source = "../.."
 
   location        = "uksouth"

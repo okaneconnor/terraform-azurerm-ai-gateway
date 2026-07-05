@@ -22,7 +22,8 @@ Redact secrets and tenant/subscription IDs.
 
 ```hcl
 module "ai_gateway" {
-  source = "github.com/okaneconnor/ai-gateway"
+  source  = "okaneconnor/ai-gateway/azurerm"
+  version = "~> 1.0"
 
   # ...
 }
