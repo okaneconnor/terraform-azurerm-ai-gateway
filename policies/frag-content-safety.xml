@@ -1,5 +1,5 @@
 <fragment>
-  <llm-content-safety backend-id="${cs_backend_id}" shield-prompt="${shield_prompt}">
+  <llm-content-safety backend-id="${cs_backend_id}" shield-prompt="${shield_prompt}" enforce-on-completions="${enforce_on_completions}">
     <categories output-type="EightSeverityLevels">
       <category name="Hate" threshold="${category_threshold}" />
       <category name="Violence" threshold="${category_threshold}" />

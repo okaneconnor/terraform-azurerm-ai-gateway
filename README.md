@@ -98,8 +98,12 @@ onboarding a team, and the end-to-end tests, see the **[usage guide](docs/usage.
 
 ### Complete example
 
-A fuller configuration exercising the common knobs. Apart from `model_deployments`
-(required), every argument below is optional with a sensible default — set only what
+A runnable end-to-end example lives in **[`examples/complete`](examples/complete)** —
+the required inputs plus a few overrides that deploy the full gateway, with a smoke-test
+walkthrough in its README.
+
+The configuration below exercises the common knobs. Apart from `model_deployments`
+(required), every argument is optional with a sensible default — set only what
 you need to override. See the
 [Inputs](#inputs) reference for the full list (including bring-your-own / landing-zone
 inputs such as `existing_network`, `existing_resource_group_name`, and
@@ -178,6 +182,36 @@ module "ai_gateway" {
 | [docs/usage.md](docs/usage.md) | Deploy, bring-your-own / landing-zone adoption, get a token, onboard a team, live tests |
 | [docs/operations.md](docs/operations.md) | Deployment gotchas, A2A agents, production hardening, cost, linting & scanning |
 
+## Known limitations
+
+This module is intentionally scoped. The following are known, deliberate gaps —
+understand them before adopting it for production:
+
+- **Single region only.** Every resource is created in one `location`; there is
+  no multi-region APIM and no per-service region override.
+- **Single backend.** The Foundry backend pool has exactly one member. There is
+  no load-balanced multi-backend and no PTU-to-PAYG spillover, so Microsoft's
+  headline scaling pattern is not implemented.
+- **Surface scope.** Only the Azure OpenAI `/openai` surface is fronted.
+  Non-OpenAI model formats (Meta/Mistral/Cohere via the `/models` inference
+  API), the newer `/responses` API, and Agents/MCP are not exposed. The imported
+  OpenAPI spec is pinned to `2024-10-21`.
+- **Semantic cache.** Caching is opt-in and requires Azure Managed Redis
+  (RediSearch) to be available in your region. Provisioning was observed to fail
+  in some regions, and the path is not validated end-to-end in all regions.
+- **Key Vault data-plane.** Human/app secret access is documented (see the note
+  in `keyvault.tf`) but not implemented. The vault is RBAC-authorized and
+  private, so wire up the data-plane role assignments yourself.
+- **Model/SKU/region interplay.** You choose the current models (there is no
+  default). In some regions the current GA chat models are only offered on
+  `GlobalStandard` (out-of-region processing), while the SKU policy default
+  allows `Standard` only — align the allowlist deliberately.
+- **Backend capacity vs tiers.** Size your model-deployment capacity at or above
+  your top tier's rate limit. Otherwise the shared backend caps bursts equally
+  across tiers and masks the tier differentiation you configured.
+- **APIM Developer SKU.** The Developer SKU has no SLA and no availability
+  zones; use `Premium_N` for production.
+
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
 
@@ -251,6 +285,7 @@ No modules.
 | [azurerm_private_dns_zone.zone](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/private_dns_zone) | resource |
 | [azurerm_private_dns_zone_virtual_network_link.link](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/private_dns_zone_virtual_network_link) | resource |
 | [azurerm_private_endpoint.pe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/private_endpoint) | resource |
+| [azurerm_public_ip.apim](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/public_ip) | resource |
 | [azurerm_resource_group.rg](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group) | resource |
 | [azurerm_resource_group_policy_assignment.allowed_deployment_skus](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group_policy_assignment) | resource |
 | [azurerm_role_assignment.apic_apim_reader](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
@@ -282,8 +317,9 @@ No modules.
 | apim\_diagnostic | APIM Application Insights diagnostic tuning. sampling\_percentage 100 captures every request (lower it to cut cost/volume at scale); verbosity is information \| verbose \| error. | <pre>object({<br/>    sampling_percentage = optional(number, 100)<br/>    verbosity           = optional(string, "information")<br/>  })</pre> | `{}` | no |
 | apim\_sku\_name | APIM SKU (name\_capacity). Default Developer\_1 (cheap, no SLA, no zones).<br/>VNet INJECTION (this module's private model) is supported ONLY on classic<br/>Developer and Premium — NOT on classic Basic/Standard.<br/>For production use Premium\_1+ (SLA, zone redundancy, multi-region). | `string` | `"Developer_1"` | no |
 | apim\_virtual\_network\_type | APIM VNet injection mode. "External" (default) gives APIM a public gateway IP<br/>inside the VNet. "Internal" removes the public endpoint entirely (no public<br/>gateway IP) — front it with Application Gateway / WAF for ingress and make sure<br/>your DNS resolves the internal gateway and the APIM subnet NSG permits it. | `string` | `"External"` | no |
+| apim\_zones | Availability zones to spread the APIM units across (e.g. ["1","2","3"]) for<br/>zone redundancy. Premium SKU only, and the number of zones must not exceed the<br/>unit count (the N in Premium\_N). Leave null (default) for a non-zonal deployment<br/>— required for Developer. Only usable in regions that offer APIM availability zones.<br/>In External VNet mode the module auto-creates a zone-redundant Standard public IP<br/>for the gateway (Azure requires a customer-assigned IP for zonal External APIM). | `list(string)` | `null` | no |
 | circuit\_breaker | Circuit breaker on the Foundry backend. Default trips on 5xx only: with a<br/>single-member pool, tripping on 429 lets one bursty client 503 the whole<br/>gateway for trip\_duration (Microsoft's sample pattern does include 429 —<br/>set trip\_on\_429 = true if you run a multi-member pool where failover helps). | <pre>object({<br/>    enabled            = optional(bool, true)<br/>    failure_count      = optional(number, 3)<br/>    interval           = optional(string, "PT1M")<br/>    trip_duration      = optional(string, "PT1M")<br/>    trip_on_429        = optional(bool, false)<br/>    accept_retry_after = optional(bool, true)<br/>  })</pre> | `{}` | no |
-| content\_safety | Prompt screening via llm-content-safety (+ Prompt Shield). Runs BEFORE the semantic cache so every prompt is screened, including ones answered from cache. Requires an ai\_services entry of kind ContentSafety. | <pre>object({<br/>    enabled            = optional(bool, true)<br/>    shield_prompt      = optional(bool, true)<br/>    category_threshold = optional(number, 4) # 0-7; blocks at >= threshold severity<br/>  })</pre> | `{}` | no |
+| content\_safety | Prompt screening via llm-content-safety (+ Prompt Shield). Runs BEFORE the semantic cache so every prompt is screened, including ones answered from cache. Requires an ai\_services entry of kind ContentSafety. Set enforce\_on\_completions=true to ALSO screen model OUTPUTS (completions): non-streaming violations return 403; for streaming responses the handler buffers events and cuts the connection on a violation (no 403). | <pre>object({<br/>    enabled                = optional(bool, true)<br/>    shield_prompt          = optional(bool, true)<br/>    category_threshold     = optional(number, 4) # 0-7; blocks at >= threshold severity<br/>    enforce_on_completions = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | create\_demo\_clients | Create one demo client app (with secret) per tier, role-assigned to that tier — handy for testing the gateway end-to-end. Off by default so real deployments don't ship unused credentials. Requires the module-created gateway app (not BYO). | `bool` | `false` | no |
 | deployment\_sku\_policy | Azure Policy guardrail denying model-deployment SKUs outside the allowlist.<br/>The default ["Standard"] keeps inference in-region (data residency): Global*/<br/>DataZone* SKUs process data outside the deployment region and are denied.<br/>Extend the list (e.g. "ProvisionedManaged", "Batch") if regional processing<br/>under those SKUs fits your residency requirements. | <pre>object({<br/>    enabled           = optional(bool, true)<br/>    allowed_sku_names = optional(list(string), ["Standard"])<br/>  })</pre> | `{}` | no |
 | enable\_api\_center | Deploy an API Center service that continuously catalogues the gateway's APIs. | `bool` | `true` | no |
@@ -302,9 +338,9 @@ No modules.
 | name\_suffix | Override the random 5-char suffix appended to most resource names. Set this for deterministic / standards-compliant names (some orgs forbid randomness in names). Leave null to generate one. | `string` | `null` | no |
 | network | VNet and subnet CIDRs for the module-created network. Ignored when existing\_network is set. APIM is injected into the apim subnet; all backends are reached via private endpoints in the pe subnet. | <pre>object({<br/>    vnet_cidr        = optional(string, "10.90.0.0/16")<br/>    apim_subnet_cidr = optional(string, "10.90.1.0/24")<br/>    pe_subnet_cidr   = optional(string, "10.90.2.0/24")<br/>  })</pre> | `{}` | no |
 | rate\_limit\_renewal\_seconds | Fixed-window length for the per-tier request rate limit. | `number` | `60` | no |
-| semantic\_cache | Semantic caching of LLM completions in Azure Managed Redis (RediSearch),<br/>partitioned per client app. score\_threshold: lower = stricter similarity.<br/>embeddings\_deployment must name a key in model\_deployments (an embeddings<br/>model used to vectorise prompts). Set enabled=false to skip Redis entirely;<br/>set high\_availability=true for a production (replicated) cache. | <pre>object({<br/>    enabled               = optional(bool, true)<br/>    redis_sku_name        = optional(string, "Balanced_B0")<br/>    high_availability     = optional(bool, false)<br/>    score_threshold       = optional(number, 0.05)<br/>    duration_seconds      = optional(number, 120)<br/>    embeddings_deployment = optional(string, "text-embedding-ada-002")<br/>  })</pre> | `{}` | no |
+| semantic\_cache | Semantic caching of LLM completions in Azure Managed Redis (RediSearch),<br/>partitioned per client app. OPT-IN — defaults off.<br/><br/>Azure Managed Redis SKU capacity varies by SUBSCRIPTION and region: some<br/>subscriptions have no capacity for the cheap Balanced (B-family) default and<br/>provisioning fails with a generic "OperationFailed" (no quota message). If that<br/>happens, override redis\_sku\_name with a family that has capacity in your<br/>subscription (e.g. "MemoryOptimized\_M10") or pick a region that offers the<br/>Balanced tier. The module cannot validate this at plan time — availability is a<br/>runtime, subscription-scoped fact.<br/><br/>Requires an embeddings model in model\_deployments matching embeddings\_deployment<br/>(used to vectorise prompts). score\_threshold: lower = stricter similarity. Set<br/>high\_availability=true for a zone-redundant cache — needs multi-zone capacity for<br/>the chosen SKU/region, which is itself capacity-constrained in some subscriptions. | <pre>object({<br/>    enabled               = optional(bool, false)<br/>    redis_sku_name        = optional(string, "Balanced_B0")<br/>    high_availability     = optional(bool, false)<br/>    score_threshold       = optional(number, 0.05)<br/>    duration_seconds      = optional(number, 120)<br/>    embeddings_deployment = optional(string, "text-embedding-ada-002")<br/>  })</pre> | `{}` | no |
 | tags | Tags applied to all taggable resources. | `map(string)` | `{}` | no |
-| tiers | Self-service consumption tiers (keyless model: limits keyed by the caller's<br/>Entra client app id). Each tier becomes an Entra app role on the gateway app<br/>AND a branch in the rate/token-limit policies, so adding an entry here is the<br/>complete change. Tokens-per-minute also bounds spend per client.<br/>The JWT policy admits only tokens carrying one of these app roles; when a<br/>client holds several, the highest tokens\_per\_minute tier wins. | <pre>map(object({<br/>    display_name      = string<br/>    app_role          = string<br/>    tokens_per_minute = number<br/>    rate_limit_calls  = number<br/>  }))</pre> | <pre>{<br/>  "ai-production-standard": {<br/>    "app_role": "AI.Gateway.Production",<br/>    "display_name": "AI Production Standard",<br/>    "rate_limit_calls": 120,<br/>    "tokens_per_minute": 150000<br/>  },<br/>  "ai-sandbox": {<br/>    "app_role": "AI.Gateway.Sandbox",<br/>    "display_name": "AI Sandbox",<br/>    "rate_limit_calls": 30,<br/>    "tokens_per_minute": 20000<br/>  }<br/>}</pre> | no |
+| tiers | Self-service consumption tiers (keyless model: limits keyed by the caller's<br/>Entra client app id). Each tier becomes an Entra app role on the gateway app<br/>AND a branch in the rate/token-limit policies, so adding an entry here is the<br/>complete change. Tokens-per-minute also bounds spend per client.<br/>The JWT policy admits only tokens carrying one of these app roles; when a<br/>client holds several, the highest tokens\_per\_minute tier wins. | <pre>map(object({<br/>    display_name       = string<br/>    app_role           = string<br/>    tokens_per_minute  = number<br/>    rate_limit_calls   = number<br/>    token_quota        = optional(number)<br/>    token_quota_period = optional(string, "Monthly")<br/>  }))</pre> | <pre>{<br/>  "ai-production-standard": {<br/>    "app_role": "AI.Gateway.Production",<br/>    "display_name": "AI Production Standard",<br/>    "rate_limit_calls": 120,<br/>    "tokens_per_minute": 150000<br/>  },<br/>  "ai-sandbox": {<br/>    "app_role": "AI.Gateway.Sandbox",<br/>    "display_name": "AI Sandbox",<br/>    "rate_limit_calls": 30,<br/>    "tokens_per_minute": 20000<br/>  }<br/>}</pre> | no |
 
 ## Outputs
 

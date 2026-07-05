@@ -38,9 +38,10 @@ resource "azurerm_api_management_policy_fragment" "content_safety" {
   name              = "ai-content-safety"
   format            = "xml"
   value = templatefile("${path.module}/policies/frag-content-safety.xml", {
-    cs_backend_id      = local.content_safety_backend_key != null ? azurerm_api_management_backend.svc[local.content_safety_backend_key].name : ""
-    shield_prompt      = var.content_safety.shield_prompt
-    category_threshold = var.content_safety.category_threshold
+    cs_backend_id          = local.content_safety_backend_key != null ? azurerm_api_management_backend.svc[local.content_safety_backend_key].name : ""
+    shield_prompt          = var.content_safety.shield_prompt
+    category_threshold     = var.content_safety.category_threshold
+    enforce_on_completions = var.content_safety.enforce_on_completions
   })
 
   lifecycle {

@@ -67,6 +67,28 @@ variable "apim_sku_name" {
   }
 }
 
+variable "apim_zones" {
+  description = <<-EOT
+    Availability zones to spread the APIM units across (e.g. ["1","2","3"]) for
+    zone redundancy. Premium SKU only, and the number of zones must not exceed the
+    unit count (the N in Premium_N). Leave null (default) for a non-zonal deployment
+    — required for Developer. Only usable in regions that offer APIM availability zones.
+    In External VNet mode the module auto-creates a zone-redundant Standard public IP
+    for the gateway (Azure requires a customer-assigned IP for zonal External APIM).
+  EOT
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.apim_zones == null ? true : can(regex("^Premium_", var.apim_sku_name))
+    error_message = "apim_zones requires a Premium_N SKU — Developer does not support availability zones."
+  }
+  validation {
+    condition     = var.apim_zones == null ? true : tonumber(split("_", var.apim_sku_name)[1]) >= length(var.apim_zones)
+    error_message = "apim_zones count must not exceed the APIM unit count (the N in Premium_N)."
+  }
+}
+
 variable "apim_virtual_network_type" {
   description = <<-EOT
     APIM VNet injection mode. "External" (default) gives APIM a public gateway IP
@@ -241,10 +263,12 @@ variable "tiers" {
     client holds several, the highest tokens_per_minute tier wins.
   EOT
   type = map(object({
-    display_name      = string
-    app_role          = string
-    tokens_per_minute = number
-    rate_limit_calls  = number
+    display_name       = string
+    app_role           = string
+    tokens_per_minute  = number
+    rate_limit_calls   = number
+    token_quota        = optional(number)
+    token_quota_period = optional(string, "Monthly")
   }))
   default = {
     "ai-sandbox" = {
@@ -282,6 +306,14 @@ variable "tiers" {
       ]
     ]))
     error_message = "No tier's app_role may be a substring of another's (e.g. \"AI.Premium\" and \"AI.Premium2\") — the policy role check is a substring match on the comma-joined roles claim."
+  }
+  validation {
+    condition     = alltrue([for t in var.tiers : contains(["Hourly", "Daily", "Weekly", "Monthly", "Yearly"], t.token_quota_period)])
+    error_message = "Each tier token_quota_period must be one of Hourly, Daily, Weekly, Monthly, Yearly (llm-token-limit token-quota-period)."
+  }
+  validation {
+    condition     = alltrue([for t in var.tiers : t.token_quota == null ? true : t.token_quota > 0])
+    error_message = "Each tier token_quota, when set, must be greater than 0."
   }
 }
 
@@ -343,11 +375,12 @@ variable "ai_services" {
 # ── AI gateway policies ──────────────────────────────────────────────────────
 
 variable "content_safety" {
-  description = "Prompt screening via llm-content-safety (+ Prompt Shield). Runs BEFORE the semantic cache so every prompt is screened, including ones answered from cache. Requires an ai_services entry of kind ContentSafety."
+  description = "Prompt screening via llm-content-safety (+ Prompt Shield). Runs BEFORE the semantic cache so every prompt is screened, including ones answered from cache. Requires an ai_services entry of kind ContentSafety. Set enforce_on_completions=true to ALSO screen model OUTPUTS (completions): non-streaming violations return 403; for streaming responses the handler buffers events and cuts the connection on a violation (no 403)."
   type = object({
-    enabled            = optional(bool, true)
-    shield_prompt      = optional(bool, true)
-    category_threshold = optional(number, 4) # 0-7; blocks at >= threshold severity
+    enabled                = optional(bool, true)
+    shield_prompt          = optional(bool, true)
+    category_threshold     = optional(number, 4) # 0-7; blocks at >= threshold severity
+    enforce_on_completions = optional(bool, false)
   })
   default = {}
 }
@@ -355,13 +388,23 @@ variable "content_safety" {
 variable "semantic_cache" {
   description = <<-EOT
     Semantic caching of LLM completions in Azure Managed Redis (RediSearch),
-    partitioned per client app. score_threshold: lower = stricter similarity.
-    embeddings_deployment must name a key in model_deployments (an embeddings
-    model used to vectorise prompts). Set enabled=false to skip Redis entirely;
-    set high_availability=true for a production (replicated) cache.
+    partitioned per client app. OPT-IN — defaults off.
+
+    Azure Managed Redis SKU capacity varies by SUBSCRIPTION and region: some
+    subscriptions have no capacity for the cheap Balanced (B-family) default and
+    provisioning fails with a generic "OperationFailed" (no quota message). If that
+    happens, override redis_sku_name with a family that has capacity in your
+    subscription (e.g. "MemoryOptimized_M10") or pick a region that offers the
+    Balanced tier. The module cannot validate this at plan time — availability is a
+    runtime, subscription-scoped fact.
+
+    Requires an embeddings model in model_deployments matching embeddings_deployment
+    (used to vectorise prompts). score_threshold: lower = stricter similarity. Set
+    high_availability=true for a zone-redundant cache — needs multi-zone capacity for
+    the chosen SKU/region, which is itself capacity-constrained in some subscriptions.
   EOT
   type = object({
-    enabled               = optional(bool, true)
+    enabled               = optional(bool, false)
     redis_sku_name        = optional(string, "Balanced_B0")
     high_availability     = optional(bool, false)
     score_threshold       = optional(number, 0.05)
