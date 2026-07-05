@@ -34,6 +34,11 @@ First published, Semantic-Versioned release.
   When set, the module skips creating that piece and wires to yours.
 - `apim_virtual_network_type` — choose `External` (default) or `Internal` VNet
   injection (front Internal with Application Gateway / WAF).
+- `apim_zones` — spread Premium APIM units across availability zones for zone
+  redundancy. Validated at plan time: Premium SKU only, and zone count must not
+  exceed the unit count (the N in `Premium_N`). In External VNet mode the module
+  auto-creates a zone-redundant Standard public IP (required by Azure for zonal
+  External APIM).
 - `name_suffix` — override the random resource-name suffix for deterministic names.
 - Tunable knobs that were previously hardcoded: `foundry_account_sku`,
   `log_analytics_sku`, `apim_diagnostic` (sampling/verbosity), `key_vault` object
@@ -48,6 +53,8 @@ First published, Semantic-Versioned release.
   `apim_virtual_network_type` enum, `apim_diagnostic` ranges, `name_suffix` charset.
 - terraform-docs config (`.terraform-docs.yml`) and generated Inputs/Outputs in the
   README; this changelog.
+- `examples/complete` — a runnable, minimal-but-full consumer configuration that
+  deploys the whole gateway, with a smoke-test walkthrough.
 - Static analysis wired into the repo: `tfsec` + `checkov` (both run clean) via
   a `.checkov.yaml` config and a `.pre-commit-config.yaml`
   (`fmt` → `validate` → `terraform-docs` → `tfsec` → `checkov`). Checkov false
@@ -59,8 +66,10 @@ First published, Semantic-Versioned release.
 ### Changed
 
 - **Semantic caching now defaults to OFF** (opt-in via `semantic_cache.enabled`).
-  It requires Azure Managed Redis (RediSearch) to be available in-region, so the
-  safe default is disabled.
+  It requires Azure Managed Redis (RediSearch), whose SKU capacity varies by
+  subscription and region — the cheap `Balanced_B0` default can fail to provision
+  (`OperationFailed`). `redis_sku_name` is override-able (e.g. `MemoryOptimized_M10`)
+  and the variable docs now call this out; the safe default stays disabled.
 - `enable_key_vault` (bool) replaced by the `key_vault` object (`enabled` + tuning).
 - Output `log_analytics_workspace_id` split into `log_analytics_workspace_resource_id`
   (ARM id) and `log_analytics_workspace_guid` (customer GUID for KQL).

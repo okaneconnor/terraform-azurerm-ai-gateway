@@ -1,12 +1,31 @@
-resource "azurerm_api_management" "apim" {
-  #checkov:skip=CKV_AZURE_174:External VNet injection intentionally exposes a public gateway IP (the front door), gated by mandatory Entra JWT validation + IP filter. Set apim_virtual_network_type="Internal" and front with App Gateway/WAF for a fully private ingress.
-  name                = local.apim_name
+# APIM in External VNet mode with availability zones requires a customer-assigned,
+# zone-redundant Standard public IP (Azure rejects the deployment with
+# PublicIpAddressIdMustBeUnique otherwise). Created only for that combination —
+# Developer and Internal mode do not use it.
+resource "azurerm_public_ip" "apim" {
+  #checkov:skip=CKV_AZURE_116:This IP fronts APIM's External-mode gateway (gated by mandatory Entra JWT + IP filter); zonal APIM requires a customer-assigned Standard IP here.
+  for_each            = var.apim_zones != null && var.apim_virtual_network_type == "External" ? { this = {} } : {}
+  name                = "pip-apim-${local.suffix}"
   location            = local.resource_group_location
   resource_group_name = local.resource_group_name
-  publisher_name      = var.publisher_name
-  publisher_email     = var.publisher_email
-  sku_name            = var.apim_sku_name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+  zones               = var.apim_zones
+  domain_name_label   = "${var.name_prefix}-apim-${local.suffix}"
   tags                = var.tags
+}
+
+resource "azurerm_api_management" "apim" {
+  #checkov:skip=CKV_AZURE_174:External VNet injection intentionally exposes a public gateway IP (the front door), gated by mandatory Entra JWT validation + IP filter. Set apim_virtual_network_type="Internal" and front with App Gateway/WAF for a fully private ingress.
+  name                 = local.apim_name
+  location             = local.resource_group_location
+  resource_group_name  = local.resource_group_name
+  publisher_name       = var.publisher_name
+  publisher_email      = var.publisher_email
+  sku_name             = var.apim_sku_name
+  zones                = var.apim_zones
+  public_ip_address_id = try(azurerm_public_ip.apim["this"].id, null)
+  tags                 = var.tags
 
   identity {
     type = "SystemAssigned"

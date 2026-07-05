@@ -67,6 +67,28 @@ variable "apim_sku_name" {
   }
 }
 
+variable "apim_zones" {
+  description = <<-EOT
+    Availability zones to spread the APIM units across (e.g. ["1","2","3"]) for
+    zone redundancy. Premium SKU only, and the number of zones must not exceed the
+    unit count (the N in Premium_N). Leave null (default) for a non-zonal deployment
+    — required for Developer. Only usable in regions that offer APIM availability zones.
+    In External VNet mode the module auto-creates a zone-redundant Standard public IP
+    for the gateway (Azure requires a customer-assigned IP for zonal External APIM).
+  EOT
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition     = var.apim_zones == null ? true : can(regex("^Premium_", var.apim_sku_name))
+    error_message = "apim_zones requires a Premium_N SKU — Developer does not support availability zones."
+  }
+  validation {
+    condition     = var.apim_zones == null ? true : tonumber(split("_", var.apim_sku_name)[1]) >= length(var.apim_zones)
+    error_message = "apim_zones count must not exceed the APIM unit count (the N in Premium_N)."
+  }
+}
+
 variable "apim_virtual_network_type" {
   description = <<-EOT
     APIM VNet injection mode. "External" (default) gives APIM a public gateway IP
@@ -366,13 +388,20 @@ variable "content_safety" {
 variable "semantic_cache" {
   description = <<-EOT
     Semantic caching of LLM completions in Azure Managed Redis (RediSearch),
-    partitioned per client app. Caching is OPT-IN: it requires an Azure Managed
-    Redis (RediSearch) instance that must be available in your region
-    (provisioning was observed to fail in some regions), so it defaults off. Set
-    enabled=true to use it, and include an embeddings model in model_deployments
-    matching embeddings_deployment (used to vectorise prompts). score_threshold:
-    lower = stricter similarity. Set high_availability=true for a production
-    (replicated) cache.
+    partitioned per client app. OPT-IN — defaults off.
+
+    Azure Managed Redis SKU capacity varies by SUBSCRIPTION and region: some
+    subscriptions have no capacity for the cheap Balanced (B-family) default and
+    provisioning fails with a generic "OperationFailed" (no quota message). If that
+    happens, override redis_sku_name with a family that has capacity in your
+    subscription (e.g. "MemoryOptimized_M10") or pick a region that offers the
+    Balanced tier. The module cannot validate this at plan time — availability is a
+    runtime, subscription-scoped fact.
+
+    Requires an embeddings model in model_deployments matching embeddings_deployment
+    (used to vectorise prompts). score_threshold: lower = stricter similarity. Set
+    high_availability=true for a zone-redundant cache — needs multi-zone capacity for
+    the chosen SKU/region, which is itself capacity-constrained in some subscriptions.
   EOT
   type = object({
     enabled               = optional(bool, false)

@@ -693,3 +693,47 @@ run "apim_tls_hardened" {
     error_message = "APIM must reject TLS 1.0/1.1 and 3DES on both frontend and backend."
   }
 }
+
+run "apim_zones_premium" {
+  command = plan
+
+  variables {
+    apim_sku_name = "Premium_2"
+    apim_zones    = ["1", "2"]
+  }
+
+  assert {
+    condition = length(azurerm_api_management.apim.zones) == 2 && alltrue([
+      for z in ["1", "2"] : contains(tolist(azurerm_api_management.apim.zones), z)
+    ])
+    error_message = "apim_zones must be passed through to the APIM resource for zonal deployment."
+  }
+
+  # External VNet + zones must auto-provision a zone-redundant Standard public IP
+  # (its id wires into public_ip_address_id, unassertable here as it's unknown at plan).
+  assert {
+    condition     = azurerm_public_ip.apim["this"].sku == "Standard" && length(azurerm_public_ip.apim["this"].zones) == 2
+    error_message = "zonal External APIM must get a zone-redundant Standard public IP across both zones."
+  }
+}
+
+run "rejects_zones_on_developer" {
+  command = plan
+
+  variables {
+    apim_zones = ["1", "2"]
+  }
+
+  expect_failures = [var.apim_zones]
+}
+
+run "rejects_zones_exceeding_units" {
+  command = plan
+
+  variables {
+    apim_sku_name = "Premium_1"
+    apim_zones    = ["1", "2", "3"]
+  }
+
+  expect_failures = [var.apim_zones]
+}
