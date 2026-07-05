@@ -14,7 +14,7 @@ is available.
 
 Use GitHub private security advisories:
 
-1. Go to the repository at https://github.com/okaneconnor/ai-gateway
+1. Go to the repository at https://github.com/okaneconnor/terraform-azurerm-ai-gateway
 2. Open the **Security** tab and choose **Report a vulnerability** to file a
    private advisory.
 

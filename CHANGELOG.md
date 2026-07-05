@@ -1,12 +1,12 @@
 # Changelog
 
 All notable changes to this module are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the module aims to
-follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once published.
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the module follows
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.0.0] — _registry candidate_
+## [1.0.0] — 2026-07-06
 
 First published, Semantic-Versioned release.
 

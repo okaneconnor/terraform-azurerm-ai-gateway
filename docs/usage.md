@@ -22,7 +22,8 @@ provider "azuread" {}
 provider "azapi" {}
 
 module "ai_gateway" {
-  source = "github.com/okaneconnor/ai-gateway"
+  source  = "okaneconnor/ai-gateway/azurerm"
+  version = "~> 1.0"
 
   location        = "uksouth"
   publisher_name  = "AI Platform Team"
