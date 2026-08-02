@@ -58,7 +58,7 @@ jobs:
           # rate-limited by the GitHub API (intermittent 403 on shared runners).
           github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: checkov
-        uses: bridgecrewio/checkov-action@v12
+        uses: bridgecrewio/checkov-action@v12.3114.0
         with:
           directory: .
           framework: terraform
