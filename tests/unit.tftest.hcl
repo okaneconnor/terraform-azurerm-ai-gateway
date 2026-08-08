@@ -869,28 +869,3 @@ run "rejects_budget_without_start_date" {
   expect_failures = [var.budget]
 }
 
-run "apim_backup_enabled" {
-  command = plan
-
-  variables {
-    apim_backup = { enabled = true }
-  }
-
-  assert {
-    condition = alltrue([
-      length(azurerm_storage_account.backup) == 1,
-      length(azurerm_storage_container.backup) == 1,
-      length(azurerm_role_assignment.apim_backup) == 1,
-    ])
-    error_message = "apim_backup.enabled must create the storage account, container, and MI role assignment."
-  }
-}
-
-run "apim_backup_disabled_by_default" {
-  command = plan
-
-  assert {
-    condition     = length(azurerm_storage_account.backup) == 0
-    error_message = "APIM backup resources must be off by default."
-  }
-}

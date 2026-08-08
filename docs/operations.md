@@ -69,36 +69,40 @@ backend URL is the private **https** Cognitive endpoint) or deliberate design ch
 (`CKV_AZURE_174` — External VNet mode intentionally exposes a JWT+IP-gated public
 gateway; use `apim_virtual_network_type = "Internal"` for a private front door).
 
-## APIM configuration backup (opt-in)
+## Disaster recovery
 
-APIM keeps APIs, policies, named values, products and subscriptions in its own control
-plane. Terraform only restores what Terraform created, so a region loss or an accidental
-service delete loses the rest. Set `apim_backup = { enabled = true }` and the module
-provisions the target — a storage account + `apim-backups` container and the
-**Storage Blob Data Contributor** role for APIM's managed identity. Backup itself is an
-imperative operation:
+**This module is your DR mechanism.** Everything the gateway is — the APIM service, VNet
+injection, APIs, policies, products, named values, backends, tiers, the Foundry account and
+model deployments, Key Vault, and private endpoints — is defined in this Terraform. A region
+loss or an accidental delete is recovered by **re-applying the module** (optionally into a new
+region). That is the [IaC approach Microsoft recommends](https://learn.microsoft.com/azure/well-architected/service-guides/azure-api-management#reliability)
+for API Management DR — the code *is* the backup, so there is nothing separate to keep in sync.
 
-```bash
-RG=$(terraform output -raw resource_group_name)
-APIM=$(terraform output -raw apim_name)
-SA=$(terraform output -raw apim_backup_storage_account_name)
+Microsoft's guidance is to layer three things; two of them are code, and this module covers
+the largest:
 
-# Back up (managed-identity auth — no storage keys)
-az apim backup -g "$RG" -n "$APIM" \
-  --storage-account-name "$SA" \
-  --storage-account-container apim-backups \
-  --backup-name "apim-$(date +%Y%m%d).apimbackup" \
-  --access-type SystemAssignedManagedIdentity
+- **IaC (this module).** Re-apply to reconstitute the gateway. Keep the Terraform in source
+  control — that history is your restore point.
+- **APIOps** for API-layer config changed *outside* Terraform. If teams edit APIs or policies
+  directly on the running service, extract them to Git and publish via a pipeline with
+  [APIOps](https://learn.microsoft.com/azure/architecture/example-scenario/devops/automated-api-deployments-apiops).
+  (APIM's built-in Git config repo was retired in March 2025; APIOps is the supported replacement.)
+- **Native `.apimbackup`** is a *supplement* for **runtime data IaC doesn't hold** — developer-
+  portal content and APIM subscriptions/users. This gateway is **keyless** (auth is Entra app
+  roles, not APIM subscriptions) and programmatic (no developer portal), so there is little such
+  state to protect; for most deployments the IaC layer already covers it. If a compliance mandate
+  requires point-in-time snapshots, run the native backup **on a schedule from your own automation**
+  (Automation runbook, Logic App, or CI pipeline) using the managed-identity operation — never a
+  hand-run command:
 
-# Restore (into the same or a rebuilt service of the same SKU/region)
-az apim restore -g "$RG" -n "$APIM" \
-  --storage-account-name "$SA" \
-  --storage-account-container apim-backups \
-  --backup-name "apim-20260714.apimbackup" \
-  --access-type SystemAssignedManagedIdentity
-```
+  ```powershell
+  # From scheduled automation. The APIM system-assigned identity needs
+  # Storage Blob Data Contributor on the target storage account.
+  Backup-AzApiManagement -ResourceGroupName $rg -Name $apim `
+    -StorageContext (New-AzStorageContext -StorageAccountName $sa) `
+    -SourceContainerName backups -TargetBlobName "apim-$(Get-Date -f yyyyMMdd).apimbackup" `
+    -AccessType SystemAssignedManagedIdentity
+  ```
 
-Schedule it from your own automation (a cron/Logic App/pipeline) — this module
-deliberately provisions the target rather than trying to run backups from Terraform.
-The backup storage keeps public network access on so the in-VNet APIM identity can reach
-it; lock it down with `network_rules`/a private endpoint for a fully private target.
+  Native backups **expire after 30 days** and restore only into a **same-SKU/region** service, so
+  they complement — never replace — the IaC restore path above.

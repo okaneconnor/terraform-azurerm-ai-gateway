@@ -142,11 +142,6 @@ output "api_center_name" {
   value       = var.enable_api_center ? azapi_resource.api_center["this"].name : null
 }
 
-output "apim_backup_storage_account_name" {
-  description = "Storage account for APIM configuration backups (apim_backup.enabled). Use with `az apim backup`."
-  value       = var.apim_backup.enabled ? azurerm_storage_account.backup["this"].name : null
-}
-
 output "alerts_action_group_id" {
   description = "Action group used by alerts/budget notifications (created or bring-your-own); null when alerting is off."
   value       = local.action_group_id

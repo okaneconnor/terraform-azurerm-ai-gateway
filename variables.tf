@@ -576,15 +576,3 @@ variable "budget" {
   }
 }
 
-variable "apim_backup" {
-  description = <<-EOT
-    Opt-in supporting resources for APIM configuration backup (default off): a storage
-    account + container and the role assignment for APIM's managed identity. Backup
-    itself is imperative (`az apim backup`) — see docs/operations.md. Not scheduled.
-  EOT
-  type = object({
-    enabled          = optional(bool, false)
-    replication_type = optional(string, "GRS")
-  })
-  default = {}
-}

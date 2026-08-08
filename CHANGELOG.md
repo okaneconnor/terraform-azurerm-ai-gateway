@@ -6,6 +6,31 @@ All notable changes to this module are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Backend diagnostic settings** (`enable_backend_diagnostics`, default on) — route
+  Foundry / Cognitive Services / Key Vault / Managed Redis service logs + metrics to Log
+  Analytics, so the model layer has a service-side trace, not just APIM's view (#9).
+- **Opt-in Azure Monitor alerting** (`var.alerts`, default off) — an action group (or
+  bring-your-own) plus metric alerts (APIM capacity, gateway 5xx, model TPM) and log-query
+  alerts (sustained 429 throttling, backend connection failures) (#10).
+- **Opt-in resource-group consumption budget** (`var.budget`, default off) with actual +
+  forecasted cost-alert notifications, wired to the alerts action group or emails (#11).
+
+### Changed
+
+- **Disaster recovery is documented as IaC-first** (#21): the module *is* the DR mechanism
+  — re-applying restores the gateway — supplemented by APIOps for API-layer config that
+  changes outside Terraform. Native APIM `.apimbackup` is described as a scheduled-automation
+  supplement (for runtime data this keyless gateway largely lacks), not shipped as a
+  provision-plus-manual-command half-feature.
+
+### Fixed
+
+- **API Center**: the `azapi` body omitted `sku`, so it created successfully but returned
+  400 `A valid Sku is required` on every subsequent apply. Added `sku = { name = "Free" }`
+  and `schema_validation_enabled = false`.
+
 ## [1.0.0] — 2026-07-06
 
 First published, Semantic-Versioned release.
