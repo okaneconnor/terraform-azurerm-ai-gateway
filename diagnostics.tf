@@ -41,6 +41,7 @@ resource "azurerm_monitor_diagnostic_setting" "redis" {
   target_resource_id         = azurerm_managed_redis.cache["this"].id
   log_analytics_workspace_id = local.log_analytics_workspace_id
 
-  enabled_log { category_group = "allLogs" }
+  # Azure Managed Redis (redisEnterprise) exposes no diagnostic LOG categories —
+  # metrics only. Setting category_group="allLogs" here 400s "not supported".
   enabled_metric { category = "AllMetrics" }
 }

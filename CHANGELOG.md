@@ -30,6 +30,13 @@ All notable changes to this module are documented here. The format follows
 - **API Center**: the `azapi` body omitted `sku`, so it created successfully but returned
   400 `A valid Sku is required` on every subsequent apply. Added `sku = { name = "Free" }`
   and `schema_validation_enabled = false`.
+- **Redis diagnostic setting**: used `category_group = "allLogs"`, which Azure rejects for
+  Managed Redis (redisEnterprise exposes no diagnostic log categories) — every cache +
+  backend-diagnostics deployment 400'd. Now metrics-only.
+- **`backend_failures` alert KQL**: matched `LastErrorReason has "Backend"`, which never
+  matches — APIM records backend-health failures as `PoolIsInactive` (breaker open),
+  `BackendConnectionFailure`, etc. The alert would have stayed silent on real failures;
+  KQL corrected to those reasons. (Both caught by live behavioral testing, not plan checks.)
 
 ## [1.0.0] — 2026-07-06
 

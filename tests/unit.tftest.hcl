@@ -869,3 +869,30 @@ run "rejects_budget_without_start_date" {
   expect_failures = [var.budget]
 }
 
+
+# Regression guards for two bugs behavioral testing caught (both passed plan+CI):
+run "redis_diagnostic_is_metrics_only" {
+  command = plan
+
+  variables {
+    semantic_cache = { enabled = true }
+  }
+
+  assert {
+    condition     = length(azurerm_monitor_diagnostic_setting.redis["this"].enabled_log) == 0
+    error_message = "Azure Managed Redis (redisEnterprise) supports no diagnostic log categories — the setting must be metrics-only (no enabled_log; category_group=allLogs 400s)."
+  }
+}
+
+run "backend_failures_kql_matches_real_reasons" {
+  command = plan
+
+  variables {
+    alerts = { enabled = true, email_receivers = ["ops@example.com"] }
+  }
+
+  assert {
+    condition     = strcontains(azurerm_monitor_scheduled_query_rules_alert_v2.backend_failures["this"].criteria[0].query, "PoolIsInactive")
+    error_message = "backend_failures KQL must match APIM's real LastErrorReason values (e.g. PoolIsInactive when the breaker opens), not an unmatched 'has \"Backend\"'."
+  }
+}

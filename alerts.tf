@@ -156,7 +156,10 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "backend_failures" {
   tags                 = var.tags
 
   criteria {
-    query                   = "ApiManagementGatewayLogs | where LastErrorReason has \"Backend\""
+    # APIM records backend-health failures as these LastErrorReason values — notably
+    # PoolIsInactive when the circuit breaker has opened. (An earlier `has "Backend"`
+    # match never fired: real reasons are PoolIsInactive / BackendConnectionFailure.)
+    query                   = "ApiManagementGatewayLogs | where LastErrorReason in ('PoolIsInactive', 'BackendConnectionFailure', 'BackendConnectionTerminated', 'BackendTimeout')"
     time_aggregation_method = "Count"
     threshold               = var.alerts.backend_failure_threshold
     operator                = "GreaterThan"
