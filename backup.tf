@@ -12,6 +12,8 @@ resource "azurerm_storage_account" "backup" {
   #checkov:skip=CKV_AZURE_33:Queue-service logging is inapplicable — this is a blob-only backup target with no queue service.
   #checkov:skip=CKV_AZURE_206:Replication is caller-configurable (var.apim_backup.replication_type); default GRS already gives cross-region durability for a DR target.
   #checkov:skip=CKV2_AZURE_40:Shared keys stay enabled so the module doesn't force `storage_use_azuread` on the caller's provider (azurerm reads queue/blob properties via keys). Backup itself uses the APIM managed identity (role assignment + --access-type SystemAssignedManagedIdentity).
+  #checkov:skip=CKV2_AZURE_41:No SAS is issued for this account — backup writes use the APIM managed identity, so a SAS expiration policy is inapplicable.
+  #checkov:skip=CKV2_AZURE_1:Uses Microsoft-managed keys by design; a customer-managed key (KV key + identity wiring) is a consumer/org choice, not forced by this generic module (same stance as the Cognitive accounts).
   for_each                        = var.apim_backup.enabled ? { this = {} } : {}
   name                            = substr(lower(replace("${var.name_prefix}bkp${local.suffix}", "-", "")), 0, 24)
   resource_group_name             = local.resource_group_name
@@ -31,6 +33,7 @@ resource "azurerm_storage_account" "backup" {
 }
 
 resource "azurerm_storage_container" "backup" {
+  #checkov:skip=CKV2_AZURE_21:Blob read-access logging isn't needed for a write-only APIM backup target; enable storage analytics logging if your org requires it.
   for_each              = var.apim_backup.enabled ? { this = {} } : {}
   name                  = "apim-backups"
   storage_account_id    = azurerm_storage_account.backup["this"].id
