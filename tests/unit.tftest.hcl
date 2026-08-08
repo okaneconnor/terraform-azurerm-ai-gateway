@@ -737,3 +737,160 @@ run "rejects_zones_exceeding_units" {
 
   expect_failures = [var.apim_zones]
 }
+
+# ── Observability & cost add-ons (#9, #10, #11, #21) ──────────────────────────
+
+run "backend_diagnostics_default_on" {
+  command = plan
+
+  assert {
+    condition     = length(azurerm_monitor_diagnostic_setting.foundry) == 1 && length(azurerm_monitor_diagnostic_setting.svc) == length(var.ai_services)
+    error_message = "Backend diagnostics default to on: foundry + one per ai_service."
+  }
+  assert {
+    condition     = length(azurerm_monitor_diagnostic_setting.keyvault) == 1 && length(azurerm_monitor_diagnostic_setting.redis) == 0
+    error_message = "KV diagnostics on (KV default enabled); Redis off (cache default disabled)."
+  }
+}
+
+run "backend_diagnostics_disabled" {
+  command = plan
+
+  variables {
+    enable_backend_diagnostics = false
+  }
+
+  assert {
+    condition = alltrue([
+      length(azurerm_monitor_diagnostic_setting.foundry) == 0,
+      length(azurerm_monitor_diagnostic_setting.svc) == 0,
+      length(azurerm_monitor_diagnostic_setting.keyvault) == 0,
+    ])
+    error_message = "enable_backend_diagnostics=false must create no backend diagnostic settings."
+  }
+}
+
+run "alerts_disabled_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(azurerm_monitor_action_group.main) == 0 && length(azurerm_monitor_metric_alert.apim_capacity) == 0 && length(azurerm_monitor_scheduled_query_rules_alert_v2.throttle_429) == 0
+    error_message = "Alerts must be off by default (no action group, no alerts)."
+  }
+}
+
+run "alerts_enabled" {
+  command = plan
+
+  variables {
+    alerts = {
+      enabled                        = true
+      email_receivers                = ["ops@example.com"]
+      model_tokens_per_min_threshold = 100000
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      length(azurerm_monitor_action_group.main) == 1,
+      length(azurerm_monitor_metric_alert.apim_capacity) == 1,
+      length(azurerm_monitor_metric_alert.gateway_5xx) == 1,
+      length(azurerm_monitor_metric_alert.model_tokens) == 1,
+      length(azurerm_monitor_scheduled_query_rules_alert_v2.throttle_429) == 1,
+      length(azurerm_monitor_scheduled_query_rules_alert_v2.backend_failures) == 1,
+    ])
+    error_message = "alerts.enabled must create the action group + all five alerts (model_tokens when threshold set)."
+  }
+}
+
+run "alerts_byo_action_group" {
+  command = plan
+
+  variables {
+    alerts = {
+      enabled                  = true
+      existing_action_group_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/existing"
+    }
+  }
+
+  assert {
+    condition     = length(azurerm_monitor_action_group.main) == 0 && length(azurerm_monitor_metric_alert.apim_capacity) == 1
+    error_message = "A supplied action group id must skip creating one but still wire the alerts."
+  }
+}
+
+run "rejects_alerts_without_destination" {
+  command = plan
+
+  variables {
+    alerts = { enabled = true }
+  }
+
+  expect_failures = [var.alerts]
+}
+
+run "budget_disabled_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(azurerm_consumption_budget_resource_group.budget) == 0
+    error_message = "Budget must be off by default."
+  }
+}
+
+run "budget_enabled" {
+  command = plan
+
+  variables {
+    budget = {
+      enabled        = true
+      amount         = 500
+      start_date     = "2026-07-01T00:00:00Z"
+      contact_emails = ["finops@example.com"]
+    }
+  }
+
+  assert {
+    condition     = length(azurerm_consumption_budget_resource_group.budget) == 1
+    error_message = "budget.enabled with a start_date + destination must create the budget."
+  }
+}
+
+run "rejects_budget_without_start_date" {
+  command = plan
+
+  variables {
+    budget = {
+      enabled        = true
+      contact_emails = ["finops@example.com"]
+    }
+  }
+
+  expect_failures = [var.budget]
+}
+
+run "apim_backup_enabled" {
+  command = plan
+
+  variables {
+    apim_backup = { enabled = true }
+  }
+
+  assert {
+    condition = alltrue([
+      length(azurerm_storage_account.backup) == 1,
+      length(azurerm_storage_container.backup) == 1,
+      length(azurerm_role_assignment.apim_backup) == 1,
+    ])
+    error_message = "apim_backup.enabled must create the storage account, container, and MI role assignment."
+  }
+}
+
+run "apim_backup_disabled_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(azurerm_storage_account.backup) == 0
+    error_message = "APIM backup resources must be off by default."
+  }
+}

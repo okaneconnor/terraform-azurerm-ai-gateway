@@ -68,3 +68,37 @@ Both scanners run clean. The handful of checkov skips are documented inline as
 backend URL is the private **https** Cognitive endpoint) or deliberate design choices
 (`CKV_AZURE_174` — External VNet mode intentionally exposes a JWT+IP-gated public
 gateway; use `apim_virtual_network_type = "Internal"` for a private front door).
+
+## APIM configuration backup (opt-in)
+
+APIM keeps APIs, policies, named values, products and subscriptions in its own control
+plane. Terraform only restores what Terraform created, so a region loss or an accidental
+service delete loses the rest. Set `apim_backup = { enabled = true }` and the module
+provisions the target — a storage account + `apim-backups` container and the
+**Storage Blob Data Contributor** role for APIM's managed identity. Backup itself is an
+imperative operation:
+
+```bash
+RG=$(terraform output -raw resource_group_name)
+APIM=$(terraform output -raw apim_name)
+SA=$(terraform output -raw apim_backup_storage_account_name)
+
+# Back up (managed-identity auth — no storage keys)
+az apim backup -g "$RG" -n "$APIM" \
+  --storage-account-name "$SA" \
+  --storage-account-container apim-backups \
+  --backup-name "apim-$(date +%Y%m%d).apimbackup" \
+  --access-type SystemAssignedManagedIdentity
+
+# Restore (into the same or a rebuilt service of the same SKU/region)
+az apim restore -g "$RG" -n "$APIM" \
+  --storage-account-name "$SA" \
+  --storage-account-container apim-backups \
+  --backup-name "apim-20260714.apimbackup" \
+  --access-type SystemAssignedManagedIdentity
+```
+
+Schedule it from your own automation (a cron/Logic App/pipeline) — this module
+deliberately provisions the target rather than trying to run backups from Terraform.
+The backup storage keeps public network access on so the in-VNet APIM identity can reach
+it; lock it down with `network_rules`/a private endpoint for a fully private target.

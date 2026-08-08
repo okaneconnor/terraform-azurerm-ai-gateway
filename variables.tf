@@ -504,3 +504,87 @@ variable "create_demo_clients" {
   }
 }
 
+
+# ── Observability & cost add-ons (issues #9, #10, #11, #21) ───────────────────
+
+variable "enable_backend_diagnostics" {
+  description = "Route service-side diagnostics (audit, request/response, metrics) from the Foundry + Cognitive Services accounts, Key Vault, and Managed Redis to the Log Analytics workspace. Off if diagnostics are enforced centrally by Azure Policy."
+  type        = bool
+  default     = true
+}
+
+variable "alerts" {
+  description = <<-EOT
+    Opt-in Azure Monitor alerting (default off). Creates an action group (or reuses
+    existing_action_group_id) and metric/log alerts for APIM capacity, gateway 5xx,
+    sustained throttling (429), backend connection failures, and — when
+    model_tokens_per_min_threshold is set — a model deployment approaching its TPM
+    quota. Provide email_receivers or existing_action_group_id when enabled.
+  EOT
+  type = object({
+    enabled                        = optional(bool, false)
+    existing_action_group_id       = optional(string)
+    email_receivers                = optional(list(string), [])
+    apim_capacity_threshold        = optional(number, 75)
+    gateway_5xx_threshold          = optional(number, 10)
+    throttle_429_threshold         = optional(number, 100)
+    backend_failure_threshold      = optional(number, 5)
+    model_tokens_per_min_threshold = optional(number)
+  })
+  default = {}
+
+  validation {
+    condition     = !var.alerts.enabled || var.alerts.existing_action_group_id != null || length(var.alerts.email_receivers) > 0
+    error_message = "When alerts.enabled, set existing_action_group_id or at least one email_receivers entry so notifications have somewhere to go."
+  }
+}
+
+variable "budget" {
+  description = <<-EOT
+    Opt-in resource-group consumption budget + cost alerts (default off). start_date
+    must be the first of the CURRENT or a future month (RFC3339, e.g. "2026-08-01T00:00:00Z")
+    — Azure rejects a past month — and is required when enabled. Notifications fire at
+    each notifications[*].threshold percent on
+    Actual or Forecasted spend, to contact_emails and (if set) action_group_id or the
+    var.alerts action group.
+  EOT
+  type = object({
+    enabled         = optional(bool, false)
+    amount          = optional(number, 1000)
+    time_grain      = optional(string, "Monthly")
+    start_date      = optional(string)
+    contact_emails  = optional(list(string), [])
+    action_group_id = optional(string)
+    notifications = optional(list(object({
+      threshold = number
+      type      = string
+    })), [{ threshold = 80, type = "Actual" }, { threshold = 100, type = "Forecasted" }])
+  })
+  default = {}
+
+  validation {
+    condition     = !var.budget.enabled || var.budget.start_date != null
+    error_message = "budget.start_date is required when budget.enabled (first of a month, RFC3339 e.g. \"2026-07-01T00:00:00Z\")."
+  }
+  validation {
+    condition     = !var.budget.enabled || var.budget.action_group_id != null || length(var.budget.contact_emails) > 0 || var.alerts.enabled
+    error_message = "When budget.enabled, provide budget.contact_emails, budget.action_group_id, or enable var.alerts so notifications have a destination."
+  }
+  validation {
+    condition     = alltrue([for n in var.budget.notifications : contains(["Actual", "Forecasted"], n.type)])
+    error_message = "Each budget.notifications[*].type must be \"Actual\" or \"Forecasted\"."
+  }
+}
+
+variable "apim_backup" {
+  description = <<-EOT
+    Opt-in supporting resources for APIM configuration backup (default off): a storage
+    account + container and the role assignment for APIM's managed identity. Backup
+    itself is imperative (`az apim backup`) — see docs/operations.md. Not scheduled.
+  EOT
+  type = object({
+    enabled          = optional(bool, false)
+    replication_type = optional(string, "GRS")
+  })
+  default = {}
+}
