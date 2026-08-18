@@ -240,6 +240,9 @@ backend_pool = {
 This provisions a private `azurerm_cognitive_account` + deployments + private endpoint
 for `payg-2`, and grants the APIM managed identity `Cognitive Services OpenAI User` on
 it automatically (no `managed_identity_scope_id` needed — that's only for BYO members).
+When `enable_backend_diagnostics` is on (the default), each `create_account` member also
+gets its own service-side diagnostic setting routed to Log Analytics, matching the
+primary account's coverage.
 
 ## Auth
 

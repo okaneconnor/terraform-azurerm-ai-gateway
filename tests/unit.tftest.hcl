@@ -942,6 +942,14 @@ run "backend_pool_two_members_shape" {
     condition     = output.backend_pool_members["primary"].priority == 2
     error_message = "primary_priority override must apply."
   }
+  assert {
+    condition     = length(azapi_resource.foundry_pool.body.properties.pool.services) == 2
+    error_message = "Pool must contain the primary + one member."
+  }
+  assert {
+    condition     = [for s in azapi_resource.foundry_pool.body.properties.pool.services : s.priority] == [2, 1]
+    error_message = "Pool services must be [primary(priority 2), ptu(priority 1)] in order."
+  }
 }
 
 run "rejects_member_without_account_or_url" {
@@ -971,6 +979,25 @@ run "rejects_weight_over_100" {
       priority     = 1
       weight       = 300
     } } }
+  }
+  expect_failures = [var.backend_pool]
+}
+
+run "rejects_priority_over_100" {
+  command = plan
+  variables {
+    backend_pool = { members = { ptu = {
+      endpoint_url = "https://x.openai.azure.com/"
+      priority     = 200
+    } } }
+  }
+  expect_failures = [var.backend_pool]
+}
+
+run "rejects_primary_weight_over_100" {
+  command = plan
+  variables {
+    backend_pool = { primary_weight = 300 }
   }
   expect_failures = [var.backend_pool]
 }
@@ -1007,6 +1034,38 @@ run "created_member_provisions_account_and_role" {
   assert {
     condition     = azurerm_role_assignment.member_openai["payg"].role_definition_name == "Cognitive Services OpenAI User"
     error_message = "Member account must grant the APIM MI Cognitive Services OpenAI User."
+  }
+}
+
+run "created_member_gets_backend_diagnostics" {
+  command = plan
+  variables {
+    model_deployments = {
+      chat = { model_name = "chat-model", model_version = "1", sku_name = "Standard" }
+    }
+    backend_pool = {
+      members = {
+        payg = {
+          priority = 2
+          create_account = {
+            model_deployments = {
+              chat = { model_name = "chat-model", model_version = "1", sku_name = "Standard" }
+            }
+          }
+        }
+      }
+    }
+  }
+  # log_analytics_workspace_id itself is unknown at plan (module-created LAW's .id
+  # is computed), so - mirroring backend_diagnostics_default_on above - assert on
+  # for_each existence rather than the unknown attribute value.
+  assert {
+    condition     = length(azurerm_monitor_diagnostic_setting.member) == 1
+    error_message = "Created member accounts must get a backend diagnostic setting when enable_backend_diagnostics is on."
+  }
+  assert {
+    condition     = contains(keys(azurerm_monitor_diagnostic_setting.member), "payg")
+    error_message = "Created member accounts must route backend diagnostics to Log Analytics."
   }
 }
 

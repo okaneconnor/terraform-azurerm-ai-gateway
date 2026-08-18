@@ -25,6 +25,16 @@ resource "azurerm_monitor_diagnostic_setting" "svc" {
   enabled_metric { category = "AllMetrics" }
 }
 
+resource "azurerm_monitor_diagnostic_setting" "member" {
+  for_each                   = var.enable_backend_diagnostics ? local.created_members : {}
+  name                       = "diag-to-law"
+  target_resource_id         = azurerm_cognitive_account.member[each.key].id
+  log_analytics_workspace_id = local.log_analytics_workspace_id
+
+  enabled_log { category_group = "allLogs" }
+  enabled_metric { category = "AllMetrics" }
+}
+
 resource "azurerm_monitor_diagnostic_setting" "keyvault" {
   for_each                   = var.enable_backend_diagnostics && var.key_vault.enabled ? { this = {} } : {}
   name                       = "diag-to-law"
