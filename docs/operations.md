@@ -68,3 +68,41 @@ Both scanners run clean. The handful of checkov skips are documented inline as
 backend URL is the private **https** Cognitive endpoint) or deliberate design choices
 (`CKV_AZURE_174` — External VNet mode intentionally exposes a JWT+IP-gated public
 gateway; use `apim_virtual_network_type = "Internal"` for a private front door).
+
+## Disaster recovery
+
+**This module is your DR mechanism.** Everything the gateway is — the APIM service, VNet
+injection, APIs, policies, products, named values, backends, tiers, the Foundry account and
+model deployments, Key Vault, and private endpoints — is defined in this Terraform. A region
+loss or an accidental delete is recovered by **re-applying the module** (optionally into a new
+region). That is the [IaC approach Microsoft recommends](https://learn.microsoft.com/azure/well-architected/service-guides/azure-api-management#reliability)
+for API Management DR — the code *is* the backup, so there is nothing separate to keep in sync.
+
+Microsoft's guidance is to layer three things; two of them are code, and this module covers
+the largest:
+
+- **IaC (this module).** Re-apply to reconstitute the gateway. Keep the Terraform in source
+  control — that history is your restore point.
+- **APIOps** for API-layer config changed *outside* Terraform. If teams edit APIs or policies
+  directly on the running service, extract them to Git and publish via a pipeline with
+  [APIOps](https://learn.microsoft.com/azure/architecture/example-scenario/devops/automated-api-deployments-apiops).
+  (APIM's built-in Git config repo was retired in March 2025; APIOps is the supported replacement.)
+- **Native `.apimbackup`** is a *supplement* for **runtime data IaC doesn't hold** — developer-
+  portal content and APIM subscriptions/users. This gateway is **keyless** (auth is Entra app
+  roles, not APIM subscriptions) and programmatic (no developer portal), so there is little such
+  state to protect; for most deployments the IaC layer already covers it. If a compliance mandate
+  requires point-in-time snapshots, run the native backup **on a schedule from your own automation**
+  (Automation runbook, Logic App, or CI pipeline) using the managed-identity operation — never a
+  hand-run command:
+
+  ```powershell
+  # From scheduled automation. The APIM system-assigned identity needs
+  # Storage Blob Data Contributor on the target storage account.
+  Backup-AzApiManagement -ResourceGroupName $rg -Name $apim `
+    -StorageContext (New-AzStorageContext -StorageAccountName $sa) `
+    -SourceContainerName backups -TargetBlobName "apim-$(Get-Date -f yyyyMMdd).apimbackup" `
+    -AccessType SystemAssignedManagedIdentity
+  ```
+
+  Native backups **expire after 30 days** and restore only into a **same-SKU/region** service, so
+  they complement — never replace — the IaC restore path above.

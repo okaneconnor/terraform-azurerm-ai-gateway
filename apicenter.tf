@@ -7,7 +7,12 @@ resource "azapi_resource" "api_center" {
   tags      = var.tags
 
   identity { type = "SystemAssigned" }
-  body = { properties = {} }
+  # sku is required on UPDATE (Azure defaults it on create); omitting it 400s
+  # "A valid Sku is required" on any subsequent apply. Free is the only tier.
+  # schema_validation_enabled=false because azapi's embedded schema for this API
+  # version doesn't yet list `sku` (the real ARM API requires it).
+  schema_validation_enabled = false
+  body                      = { sku = { name = "Free" }, properties = {} }
 }
 
 resource "azurerm_role_assignment" "apic_apim_reader" {
