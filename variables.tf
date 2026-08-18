@@ -492,6 +492,17 @@ variable "backend_pool" {
     ])
     error_message = "Each create_account member must declare a deployment for every name in var.model_deployments (parity for transparent failover)."
   }
+  validation {
+    # Member keys feed local.member_account_name (${name_prefix}-fdry-${k}-${suffix}),
+    # which becomes a Cognitive account name + custom_subdomain_name. Fail fast at plan
+    # time rather than let an invalid key reach the Azure API at apply time. The 24-char
+    # bound keeps the composed name (name_prefix<=15 + "-fdry-" + key + "-" + suffix<=8)
+    # within the 64-char Cognitive account name limit.
+    condition = alltrue([
+      for k, m in var.backend_pool.members : can(regex("^[a-z0-9]([a-z0-9-]{0,22}[a-z0-9])?$", k))
+    ])
+    error_message = "backend_pool.members keys must be 1-24 chars, lowercase alphanumeric or hyphen, starting and ending alphanumeric (they form Azure Cognitive account names)."
+  }
 }
 
 variable "circuit_breaker" {

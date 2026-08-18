@@ -1012,3 +1012,11 @@ run "rejects_member_missing_deployment_parity" {
   }
   expect_failures = [var.backend_pool]
 }
+
+run "rejects_invalid_member_key" {
+  command = plan
+  variables {
+    backend_pool = { members = { "Bad.Key_1" = { priority = 2, endpoint_url = "https://x.openai.azure.com/" } } }
+  }
+  expect_failures = [var.backend_pool]
+}
