@@ -419,6 +419,81 @@ variable "semantic_cache" {
   }
 }
 
+variable "backend_pool" {
+  description = <<-EOT
+    Multi-member load-balanced backend pool for the Foundry backend. The module's
+    own Foundry account is always a member (primary_priority / primary_weight); add
+    `members` for the PTU-priority + PAYG-spillover pattern — a Provisioned member at
+    priority 1 with Standard members as overflow at priority 2. Lower-priority members
+    receive traffic only when every higher-priority member's circuit breaker has
+    tripped. Each member is EITHER module-created (`create_account`) OR bring-your-own
+    (`endpoint_url`) — exactly one. Default {} reproduces the single-member pool.
+    Max 30 members total (Azure limit). Set circuit_breaker.trip_on_429 = true on a
+    PTU member so 429 (PTU exhausted) spills to PAYG.
+  EOT
+  type = object({
+    primary_priority = optional(number, 1)
+    primary_weight   = optional(number, 100)
+    members = optional(map(object({
+      create_account = optional(object({
+        location = optional(string)
+        sku_name = optional(string, "S0")
+        model_deployments = map(object({
+          model_name    = string
+          model_version = string
+          sku_name      = optional(string, "Standard")
+          capacity      = optional(number, 10)
+          model_format  = optional(string, "OpenAI")
+        }))
+      }))
+      endpoint_url              = optional(string)
+      managed_identity_scope_id = optional(string)
+      priority                  = optional(number, 2)
+      weight                    = optional(number, 100)
+      circuit_breaker = optional(object({
+        enabled            = optional(bool)
+        failure_count      = optional(number)
+        interval           = optional(string)
+        trip_duration      = optional(string)
+        trip_on_429        = optional(bool)
+        accept_retry_after = optional(bool)
+      }))
+    })), {})
+  })
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for k, m in var.backend_pool.members :
+      (m.create_account != null) != (m.endpoint_url != null)
+    ])
+    error_message = "Each backend_pool.members entry must set exactly one of create_account or endpoint_url."
+  }
+  validation {
+    condition = alltrue([
+      for k, m in var.backend_pool.members :
+      m.priority >= 1 && m.weight >= 1 && m.weight <= 1000
+    ])
+    error_message = "backend_pool.members: priority must be >= 1 and weight in 1..1000."
+  }
+  validation {
+    condition     = var.backend_pool.primary_priority >= 1 && var.backend_pool.primary_weight >= 1 && var.backend_pool.primary_weight <= 1000
+    error_message = "backend_pool.primary_priority must be >= 1 and primary_weight in 1..1000."
+  }
+  validation {
+    condition     = 1 + length(var.backend_pool.members) <= 30
+    error_message = "A backend pool supports at most 30 members including the primary (Azure limit)."
+  }
+  validation {
+    condition = alltrue([
+      for k, m in var.backend_pool.members :
+      m.create_account == null ? true :
+      length(setsubtract(keys(var.model_deployments), keys(m.create_account.model_deployments))) == 0
+    ])
+    error_message = "Each create_account member must declare a deployment for every name in var.model_deployments (parity for transparent failover)."
+  }
+}
+
 variable "circuit_breaker" {
   description = <<-EOT
     Circuit breaker on the Foundry backend. Default trips on 5xx only: with a

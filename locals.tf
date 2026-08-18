@@ -93,4 +93,29 @@ locals {
   llm_apis = {
     foundry = azurerm_api_management_api.foundry.id
   }
+
+  # ── Multi-member backend pool (#15) ──
+  pool_members    = var.backend_pool.members
+  created_members = { for k, m in local.pool_members : k => m if m.create_account != null }
+  byo_members     = { for k, m in local.pool_members : k => m if m.endpoint_url != null }
+
+  member_deployments = merge([
+    for k, m in local.created_members : {
+      for dname, d in m.create_account.model_deployments : "${k}/${dname}" => {
+        member     = k
+        deployment = dname
+        spec       = d
+      }
+    }
+  ]...)
+
+  # Effective per-member circuit breaker: member override merged over var.circuit_breaker.
+  member_cb = { for k, m in local.pool_members : k => {
+    enabled            = coalesce(try(m.circuit_breaker.enabled, null), var.circuit_breaker.enabled)
+    failure_count      = coalesce(try(m.circuit_breaker.failure_count, null), var.circuit_breaker.failure_count)
+    interval           = coalesce(try(m.circuit_breaker.interval, null), var.circuit_breaker.interval)
+    trip_duration      = coalesce(try(m.circuit_breaker.trip_duration, null), var.circuit_breaker.trip_duration)
+    trip_on_429        = coalesce(try(m.circuit_breaker.trip_on_429, null), var.circuit_breaker.trip_on_429)
+    accept_retry_after = coalesce(try(m.circuit_breaker.accept_retry_after, null), var.circuit_breaker.accept_retry_after)
+  } }
 }

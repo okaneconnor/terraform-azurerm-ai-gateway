@@ -146,3 +146,23 @@ output "alerts_action_group_id" {
   description = "Action group used by alerts/budget notifications (created or bring-your-own); null when alerting is off."
   value       = local.action_group_id
 }
+
+# ── Backend pool (#15) ────────────────────────────────────────────────────────
+
+output "backend_pool_members" {
+  description = "Backend pool members and their priority/weight/kind (includes the module's Foundry account as 'primary')."
+  value = merge(
+    { primary = {
+      priority    = var.backend_pool.primary_priority
+      weight      = var.backend_pool.primary_weight
+      kind        = "created"
+      trip_on_429 = var.circuit_breaker.trip_on_429
+    } },
+    { for k, m in var.backend_pool.members : k => {
+      priority    = m.priority
+      weight      = m.weight
+      kind        = m.create_account != null ? "created" : "byo"
+      trip_on_429 = local.member_cb[k].trip_on_429
+    } }
+  )
+}

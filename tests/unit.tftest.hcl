@@ -896,3 +896,69 @@ run "backend_failures_kql_matches_real_reasons" {
     error_message = "backend_failures KQL must match APIM's real LastErrorReason values (e.g. PoolIsInactive when the breaker opens), not an unmatched 'has \"Backend\"'."
   }
 }
+
+# ── Multi-member backend pool (#15) ───────────────────────────────────────────
+
+run "backend_pool_default_single_member" {
+  command = plan
+  assert {
+    condition     = length(output.backend_pool_members) == 1
+    error_message = "Default backend_pool must yield a single (primary) member."
+  }
+  assert {
+    condition     = output.backend_pool_members["primary"].priority == 1
+    error_message = "Primary member must default to priority 1."
+  }
+}
+
+run "backend_pool_two_members_shape" {
+  command = plan
+  variables {
+    backend_pool = {
+      primary_priority = 2
+      members = {
+        ptu = {
+          endpoint_url              = "https://my-ptu.openai.azure.com/"
+          managed_identity_scope_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/mock-rg/providers/Microsoft.CognitiveServices/accounts/ptu"
+          priority                  = 1
+          circuit_breaker           = { trip_on_429 = true }
+        }
+      }
+    }
+  }
+  assert {
+    condition     = length(output.backend_pool_members) == 2
+    error_message = "Primary + one member must yield two pool members."
+  }
+  assert {
+    condition     = output.backend_pool_members["ptu"].kind == "byo"
+    error_message = "endpoint_url member must be classified byo."
+  }
+  assert {
+    condition     = output.backend_pool_members["ptu"].trip_on_429 == true
+    error_message = "Per-member circuit_breaker override must surface trip_on_429=true."
+  }
+  assert {
+    condition     = output.backend_pool_members["primary"].priority == 2
+    error_message = "primary_priority override must apply."
+  }
+}
+
+run "rejects_member_without_account_or_url" {
+  command = plan
+  variables {
+    backend_pool = { members = { bad = { priority = 2 } } }
+  }
+  expect_failures = [var.backend_pool]
+}
+
+run "rejects_member_with_both_account_and_url" {
+  command = plan
+  variables {
+    backend_pool = { members = { bad = {
+      endpoint_url   = "https://x.openai.azure.com/"
+      create_account = { model_deployments = { chat = { model_name = "chat-model", model_version = "1", sku_name = "Standard" } } }
+    } } }
+  }
+  expect_failures = [var.backend_pool]
+}
