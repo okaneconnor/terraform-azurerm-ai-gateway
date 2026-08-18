@@ -119,6 +119,14 @@ locals {
     accept_retry_after = coalesce(try(m.circuit_breaker.accept_retry_after, null), var.circuit_breaker.accept_retry_after)
   } }
 
+  # Backend URL per pool member: module-created accounts derive it from the
+  # created azurerm_cognitive_account; BYO members use the consumer-supplied endpoint_url.
+  member_endpoint = { for k, m in local.pool_members : k =>
+    m.create_account != null
+    ? "${azurerm_cognitive_account.member[k].endpoint}openai"
+    : "${trimsuffix(m.endpoint_url, "/")}/openai"
+  }
+
   # Member Cognitive account names mirror local.foundry_name's convention
   # ("${var.name_prefix}-fdry-${local.suffix}"): same prefix source and same
   # local.suffix, with the member key inserted for uniqueness across members.

@@ -1020,3 +1020,21 @@ run "rejects_invalid_member_key" {
   }
   expect_failures = [var.backend_pool]
 }
+
+run "byo_member_backend_created" {
+  command = plan
+  variables {
+    backend_pool = {
+      members = {
+        ptu = {
+          endpoint_url = "https://my-ptu.openai.azure.com/"
+          priority     = 1
+        }
+      }
+    }
+  }
+  assert {
+    condition     = azapi_resource.member_backend["ptu"].name == "foundry-member-ptu"
+    error_message = "Each pool member must produce a Single backend named foundry-member-<key>."
+  }
+}
