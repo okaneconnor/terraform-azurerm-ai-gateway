@@ -98,5 +98,55 @@ resource "azapi_resource" "foundry_pool" {
     }
   }
 
+  # Serialize writes to the pool object with the destroy-time cleanup PATCH below,
+  # so the two don't race on the backend's ETag during a member removal.
+  locks = ["${azurerm_api_management.apim.id}/backends/foundry-pool"]
+
   schema_validation_enabled = false
+}
+
+# Member-removal ordering guard. Terraform destroys a removed member's backend before
+# updating the pool to drop it — and Azure rejects deleting a backend still referenced
+# in a pool ("...cannot be deleted"). This is a by-design Terraform core limitation
+# (hashicorp/terraform#32153, #35763): when a member leaves the map, the pool's for-loop
+# stops referencing it, so the dependency edge that would order "update pool before
+# delete backend" simply vanishes.
+#
+# The fix: one destroy-time twin per member. Because this action depends_on the member
+# backends, on removal Terraform destroys the twin (firing a PATCH that rewrites the
+# pool WITHOUT this member) BEFORE it destroys the member's backend — so the backend is
+# already unreferenced when its DELETE runs. Ids are built as strings (not resource-
+# attribute refs) to avoid a cycle back through the pool. Covers single-member add /
+# remove and 1-for-1 swap in one apply; removing 2+ members in a SINGLE apply is not
+# guaranteed (each twin's stored body predates the others' removal) — remove members one
+# apply at a time. See docs/backend-pool.md.
+resource "azapi_resource_action" "pool_member_cleanup" {
+  for_each    = local.pool_members
+  type        = "Microsoft.ApiManagement/service/backends@2024-06-01-preview"
+  resource_id = "${azurerm_api_management.apim.id}/backends/foundry-pool"
+  method      = "PATCH"
+  when        = "destroy"
+  locks       = ["${azurerm_api_management.apim.id}/backends/foundry-pool"]
+
+  body = {
+    properties = {
+      type = "Pool"
+      pool = {
+        services = concat(
+          [{
+            id       = "${azurerm_api_management.apim.id}/backends/${azapi_resource.foundry_member.name}"
+            priority = var.backend_pool.primary_priority
+            weight   = var.backend_pool.primary_weight
+          }],
+          [for k, m in local.pool_members : {
+            id       = "${azurerm_api_management.apim.id}/backends/foundry-member-${k}"
+            priority = m.priority
+            weight   = m.weight
+          } if k != each.key],
+        )
+      }
+    }
+  }
+
+  depends_on = [azapi_resource.member_backend]
 }
