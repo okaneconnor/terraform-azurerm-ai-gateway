@@ -131,9 +131,10 @@ Then call the gateway:
 
 ```bash
 GATEWAY_URL=$(terraform output -raw apim_gateway_url)
+# GPT-5 family models require max_completion_tokens (max_tokens 400s). See onboarding.md.
 curl -s -X POST "$GATEWAY_URL/openai/deployments/gpt-5.4-mini/chat/completions?api-version=2024-10-21" \
   -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
-  -d '{"messages":[{"role":"user","content":"hello"}],"max_tokens":10}'
+  -d '{"messages":[{"role":"user","content":"hello"}],"max_completion_tokens":100}'
 ```
 
 ## Onboarding a team (app-role assignment)
@@ -160,7 +161,8 @@ Export `$TOKEN`, `$GATEWAY_URL`, and `$GATEWAY_APP_ID` as shown in
 
 ```bash
 CHAT="$GATEWAY_URL/openai/deployments/gpt-5.4-mini/chat/completions?api-version=2024-10-21"
-BODY='{"messages":[{"role":"user","content":"hello"}],"max_tokens":10}'
+# GPT-5 family requires max_completion_tokens (max_tokens 400s). Older models accept either.
+BODY='{"messages":[{"role":"user","content":"hello"}],"max_completion_tokens":16}'
 
 # Auth — valid token 200, no token 401
 curl -s -o /dev/null -w "valid  %{http_code}\n" -X POST "$CHAT" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d "$BODY"
@@ -168,7 +170,7 @@ curl -s -o /dev/null -w "none   %{http_code}\n" -X POST "$CHAT" -H "Content-Type
 
 # Content safety — a harmful prompt is blocked (403)
 curl -s -o /dev/null -w "unsafe %{http_code}\n" -X POST "$CHAT" -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
-  -d '{"messages":[{"role":"user","content":"<a clearly harmful prompt>"}],"max_tokens":10}'
+  -d '{"messages":[{"role":"user","content":"<a clearly harmful prompt>"}],"max_completion_tokens":16}'
 
 # Data residency — Azure Policy denies an out-of-band deployment on a SKU outside
 # your allowed_sku_names (the module's cross-validation already blocks it in Terraform;
