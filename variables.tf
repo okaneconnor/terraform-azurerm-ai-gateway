@@ -472,13 +472,13 @@ variable "backend_pool" {
   validation {
     condition = alltrue([
       for k, m in var.backend_pool.members :
-      m.priority >= 1 && m.weight >= 1 && m.weight <= 1000
+      m.priority >= 1 && m.priority <= 100 && m.weight >= 1 && m.weight <= 100
     ])
-    error_message = "backend_pool.members: priority must be >= 1 and weight in 1..1000."
+    error_message = "backend_pool.members: priority and weight must each be 1..100 (Azure BackendPoolItem limits)."
   }
   validation {
-    condition     = var.backend_pool.primary_priority >= 1 && var.backend_pool.primary_weight >= 1 && var.backend_pool.primary_weight <= 1000
-    error_message = "backend_pool.primary_priority must be >= 1 and primary_weight in 1..1000."
+    condition     = var.backend_pool.primary_priority >= 1 && var.backend_pool.primary_priority <= 100 && var.backend_pool.primary_weight >= 1 && var.backend_pool.primary_weight <= 100
+    error_message = "backend_pool.primary_priority and primary_weight must each be 1..100 (Azure BackendPoolItem limits)."
   }
   validation {
     condition     = 1 + length(var.backend_pool.members) <= 30

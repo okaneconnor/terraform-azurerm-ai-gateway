@@ -25,7 +25,7 @@ members = {
     endpoint_url    = "..."    # OR bring-your-own — an existing Foundry/Azure OpenAI endpoint
 
     priority = 2      # default 2 — see "Priority semantics" below
-    weight   = 100     # default 100, range 1..1000
+    weight   = 100     # default 100, range 1-100 (Azure BackendPoolItem limit)
 
     managed_identity_scope_id = "..."   # BYO only: grants the APIM MI access (see "Auth")
     circuit_breaker            = { ... } # optional per-member override of var.circuit_breaker
@@ -41,11 +41,16 @@ primary** (an Azure API Management limit); the module validates this at plan tim
 ## Priority semantics
 
 Azure API Management's priority-based load balancing (see
-[Backends in API Management](https://learn.microsoft.com/azure/api-management/backends#load-balanced-pool)):
+[Backends in API Management](https://learn.microsoft.com/azure/api-management/backends#load-balanced-pool)),
+in its own words — two separate notes from that page:
 
-> Send requests to higher priority groups first; within a group, distribute according to
-> weight. The service uses backends in lower priority groups **only when all backends in
-> higher priority groups are unavailable because circuit breaker rules are tripped.**
+> Priority-based: Organize backends into priority groups. Send requests to higher
+> priority groups first; within a group, distribute requests evenly or according to
+> assigned weights.
+
+> The API Management service uses backends in lower priority groups only when all
+> backends in higher priority groups are unavailable because circuit breaker rules are
+> tripped.
 
 Lower `priority` numbers are served *first*: `priority = 1` is the highest-priority group.
 For PTU-priority + PAYG-spillover, put the PTU member at `priority = 1` and the
@@ -53,9 +58,9 @@ Standard/PAYG member(s) at `priority = 2`. A priority-2 member receives **zero**
 until *every* priority-1 member's circuit breaker has tripped — this isn't a soft
 weighting, it's a hard cutover driven entirely by breaker state.
 
-Within a priority group, `weight` (1-1000) distributes load across members that share
-that priority — e.g. two PAYG members both at `priority = 2` with weights `300`/`100`
-split roughly 3:1.
+Within a priority group, `weight` (1-100 — Azure's `BackendPoolItem` limit) distributes
+load across members that share that priority — e.g. two PAYG members both at
+`priority = 2` with weights `75`/`25` split roughly 3:1.
 
 ## `trip_on_429` for pools
 

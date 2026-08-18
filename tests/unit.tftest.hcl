@@ -963,6 +963,18 @@ run "rejects_member_with_both_account_and_url" {
   expect_failures = [var.backend_pool]
 }
 
+run "rejects_weight_over_100" {
+  command = plan
+  variables {
+    backend_pool = { members = { ptu = {
+      endpoint_url = "https://x.openai.azure.com/"
+      priority     = 1
+      weight       = 300
+    } } }
+  }
+  expect_failures = [var.backend_pool]
+}
+
 run "created_member_provisions_account_and_role" {
   command = plan
   variables {
