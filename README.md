@@ -182,6 +182,7 @@ module "ai_gateway" {
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | Architecture diagram, keyless/tiering model, policy chain, data residency, resilience & caching |
 | [docs/usage.md](docs/usage.md) | Deploy, bring-your-own / landing-zone adoption, get a token, onboard a team, live tests |
+| [docs/backend-pool.md](docs/backend-pool.md) | Multi-member backend pool: PTU-priority + PAYG-spillover, priority/weight semantics, `trip_on_429`, the two spillover layers |
 | [docs/operations.md](docs/operations.md) | Deployment gotchas, A2A agents, production hardening, cost, linting & scanning |
 
 ## Known limitations
@@ -191,9 +192,13 @@ understand them before adopting it for production:
 
 - **Single region only.** Every resource is created in one `location`; there is
   no multi-region APIM and no per-service region override.
-- **Single backend.** The Foundry backend pool has exactly one member. There is
-  no load-balanced multi-backend and no PTU-to-PAYG spillover, so Microsoft's
-  headline scaling pattern is not implemented.
+- **Gateway-side pool only.** `var.backend_pool` (default: single-member, today's
+  behavior) gives priority/weight failover across multiple Foundry/Azure OpenAI
+  endpoints — the PTU-priority + PAYG-spillover pattern — see
+  [docs/backend-pool.md](docs/backend-pool.md). The complementary Azure OpenAI
+  *service-side* `spilloverDeploymentName` (overflow to a Standard deployment
+  **within the same resource**) is not provisioned: `azurerm_cognitive_deployment`
+  has no such argument.
 - **Surface scope.** Only the Azure OpenAI `/openai` surface is fronted.
   Non-OpenAI model formats (Meta/Mistral/Cohere via the `/models` inference
   API), the newer `/responses` API, and Agents/MCP are not exposed. The imported
@@ -248,6 +253,7 @@ No modules.
 | [azapi_resource.foundry_member](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
 | [azapi_resource.foundry_pool](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
 | [azapi_resource.llm_diagnostic](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
+| [azapi_resource.member_backend](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/resource) | resource |
 | [azapi_update_resource.appinsights_custom_metrics](https://registry.terraform.io/providers/azure/azapi/latest/docs/resources/update_resource) | resource |
 | [azuread_app_role_assignment.demo](https://registry.terraform.io/providers/hashicorp/azuread/latest/docs/resources/app_role_assignment) | resource |
 | [azuread_application.demo](https://registry.terraform.io/providers/hashicorp/azuread/latest/docs/resources/application) | resource |
@@ -276,7 +282,9 @@ No modules.
 | [azurerm_application_insights.ai](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/application_insights) | resource |
 | [azurerm_application_insights_workbook.apim](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/application_insights_workbook) | resource |
 | [azurerm_cognitive_account.foundry](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/cognitive_account) | resource |
+| [azurerm_cognitive_account.member](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/cognitive_account) | resource |
 | [azurerm_cognitive_account.svc](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/cognitive_account) | resource |
+| [azurerm_cognitive_deployment.member_model](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/cognitive_deployment) | resource |
 | [azurerm_cognitive_deployment.model](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/cognitive_deployment) | resource |
 | [azurerm_consumption_budget_resource_group.budget](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/consumption_budget_resource_group) | resource |
 | [azurerm_key_vault.main](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/key_vault) | resource |
@@ -305,6 +313,7 @@ No modules.
 | [azurerm_role_assignment.apim_foundry_openai](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
 | [azurerm_role_assignment.apim_kv_secrets](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
 | [azurerm_role_assignment.apim_svc](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
+| [azurerm_role_assignment.member_openai](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
 | [azurerm_subnet.apim](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet) | resource |
 | [azurerm_subnet.pe](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet) | resource |
 | [azurerm_subnet_network_security_group_association.apim](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet_network_security_group_association) | resource |
@@ -332,6 +341,7 @@ No modules.
 | apim\_sku\_name | APIM SKU (name\_capacity). Default Developer\_1 (cheap, no SLA, no zones).<br/>VNet INJECTION (this module's private model) is supported ONLY on classic<br/>Developer and Premium — NOT on classic Basic/Standard.<br/>For production use Premium\_1+ (SLA, zone redundancy, multi-region). | `string` | `"Developer_1"` | no |
 | apim\_virtual\_network\_type | APIM VNet injection mode. "External" (default) gives APIM a public gateway IP<br/>inside the VNet. "Internal" removes the public endpoint entirely (no public<br/>gateway IP) — front it with Application Gateway / WAF for ingress and make sure<br/>your DNS resolves the internal gateway and the APIM subnet NSG permits it. | `string` | `"External"` | no |
 | apim\_zones | Availability zones to spread the APIM units across (e.g. ["1","2","3"]) for<br/>zone redundancy. Premium SKU only, and the number of zones must not exceed the<br/>unit count (the N in Premium\_N). Leave null (default) for a non-zonal deployment<br/>— required for Developer. Only usable in regions that offer APIM availability zones.<br/>In External VNet mode the module auto-creates a zone-redundant Standard public IP<br/>for the gateway (Azure requires a customer-assigned IP for zonal External APIM). | `list(string)` | `null` | no |
+| backend\_pool | Multi-member load-balanced backend pool for the Foundry backend. The module's<br/>own Foundry account is always a member (primary\_priority / primary\_weight); add<br/>`members` for the PTU-priority + PAYG-spillover pattern — a Provisioned member at<br/>priority 1 with Standard members as overflow at priority 2. Lower-priority members<br/>receive traffic only when every higher-priority member's circuit breaker has<br/>tripped. Each member is EITHER module-created (`create_account`) OR bring-your-own<br/>(`endpoint_url`) — exactly one. Default {} reproduces the single-member pool.<br/>Max 30 members total (Azure limit). Set circuit\_breaker.trip\_on\_429 = true on a<br/>PTU member so 429 (PTU exhausted) spills to PAYG. | <pre>object({<br/>    primary_priority = optional(number, 1)<br/>    primary_weight   = optional(number, 100)<br/>    members = optional(map(object({<br/>      create_account = optional(object({<br/>        location = optional(string)<br/>        sku_name = optional(string, "S0")<br/>        model_deployments = map(object({<br/>          model_name    = string<br/>          model_version = string<br/>          sku_name      = optional(string, "Standard")<br/>          capacity      = optional(number, 10)<br/>          model_format  = optional(string, "OpenAI")<br/>        }))<br/>      }))<br/>      endpoint_url              = optional(string)<br/>      managed_identity_scope_id = optional(string)<br/>      priority                  = optional(number, 2)<br/>      weight                    = optional(number, 100)<br/>      circuit_breaker = optional(object({<br/>        enabled            = optional(bool)<br/>        failure_count      = optional(number)<br/>        interval           = optional(string)<br/>        trip_duration      = optional(string)<br/>        trip_on_429        = optional(bool)<br/>        accept_retry_after = optional(bool)<br/>      }))<br/>    })), {})<br/>  })</pre> | `{}` | no |
 | budget | Opt-in resource-group consumption budget + cost alerts (default off). start\_date<br/>must be the first of the CURRENT or a future month (RFC3339, e.g. "2026-08-01T00:00:00Z")<br/>— Azure rejects a past month — and is required when enabled. Notifications fire at<br/>each notifications[*].threshold percent on<br/>Actual or Forecasted spend, to contact\_emails and (if set) action\_group\_id or the<br/>var.alerts action group. | <pre>object({<br/>    enabled         = optional(bool, false)<br/>    amount          = optional(number, 1000)<br/>    time_grain      = optional(string, "Monthly")<br/>    start_date      = optional(string)<br/>    contact_emails  = optional(list(string), [])<br/>    action_group_id = optional(string)<br/>    notifications = optional(list(object({<br/>      threshold = number<br/>      type      = string<br/>    })), [{ threshold = 80, type = "Actual" }, { threshold = 100, type = "Forecasted" }])<br/>  })</pre> | `{}` | no |
 | circuit\_breaker | Circuit breaker on the Foundry backend. Default trips on 5xx only: with a<br/>single-member pool, tripping on 429 lets one bursty client 503 the whole<br/>gateway for trip\_duration (Microsoft's sample pattern does include 429 —<br/>set trip\_on\_429 = true if you run a multi-member pool where failover helps). | <pre>object({<br/>    enabled            = optional(bool, true)<br/>    failure_count      = optional(number, 3)<br/>    interval           = optional(string, "PT1M")<br/>    trip_duration      = optional(string, "PT1M")<br/>    trip_on_429        = optional(bool, false)<br/>    accept_retry_after = optional(bool, true)<br/>  })</pre> | `{}` | no |
 | content\_safety | Prompt screening via llm-content-safety (+ Prompt Shield). Runs BEFORE the semantic cache so every prompt is screened, including ones answered from cache. Requires an ai\_services entry of kind ContentSafety. Set enforce\_on\_completions=true to ALSO screen model OUTPUTS (completions): non-streaming violations return 403; for streaming responses the handler buffers events and cuts the connection on a violation (no 403). | <pre>object({<br/>    enabled                = optional(bool, true)<br/>    shield_prompt          = optional(bool, true)<br/>    category_threshold     = optional(number, 4) # 0-7; blocks at >= threshold severity<br/>    enforce_on_completions = optional(bool, false)<br/>  })</pre> | `{}` | no |
@@ -372,6 +382,7 @@ No modules.
 | apim\_subnet\_id | Subnet APIM is injected into. |
 | application\_insights\_connection\_string | Application Insights connection string for consumer apps that want to correlate telemetry. |
 | application\_insights\_id | Application Insights resource ID (module-created or bring-your-own). |
+| backend\_pool\_members | Backend pool members and their priority/weight/kind (includes the module's Foundry account as 'primary'). |
 | demo\_clients | Demo client credentials per tier (only when create\_demo\_clients = true). Map of tier key -> { client\_id, client\_secret }. |
 | foundry\_account\_name | Foundry (AIServices) account name. |
 | foundry\_endpoint | Foundry account endpoint (private; resolvable only inside the VNet). |

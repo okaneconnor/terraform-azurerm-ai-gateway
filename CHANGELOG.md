@@ -8,6 +8,11 @@ All notable changes to this module are documented here. The format follows
 
 ### Added
 
+- **Multi-member backend pool** (`var.backend_pool`, default single-member) — priority +
+  weight load balancing across multiple Foundry endpoints with per-member circuit breakers,
+  for the MS-recommended PTU-priority + PAYG-spillover pattern. Members are module-created
+  (a private AIServices account + deployments) or bring-your-own (`endpoint_url`). The APIM
+  managed identity is granted `Cognitive Services OpenAI User` on each member. (#15)
 - **Backend diagnostic settings** (`enable_backend_diagnostics`, default on) — route
   Foundry / Cognitive Services / Key Vault / Managed Redis service logs + metrics to Log
   Analytics, so the model layer has a service-side trace, not just APIM's view (#9).

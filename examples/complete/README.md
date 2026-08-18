@@ -56,6 +56,27 @@ tier differentiation, content-safety, and residency tests.
 - **Semantic cache** is opt-in (`semantic_cache = { enabled = true, ... }`). It needs
   Azure Managed Redis; if the default `Balanced_B0` fails to provision in your
   subscription, override `redis_sku_name` (e.g. `"MemoryOptimized_M10"`).
+- **Backend pool (PTU-priority + PAYG-spillover):** `backend_pool` is opt-in (default
+  `{}` = today's single-member behavior). To add a bring-your-own PTU endpoint that
+  gets priority over the module's own Standard/PAYG account:
+
+  ```hcl
+  backend_pool = {
+    primary_priority = 2   # the module's own account becomes the PAYG spillover target
+    members = {
+      ptu = {
+        endpoint_url               = "https://contoso-ptu.openai.azure.com/" # same deployment names as model_deployments
+        priority                   = 1                                       # served first
+        managed_identity_scope_id  = "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/contoso-ptu"
+        circuit_breaker            = { trip_on_429 = true }                  # 429 == PTU exhausted -> spill to PAYG
+      }
+    }
+  }
+  ```
+
+  See [docs/backend-pool.md](../../docs/backend-pool.md) for priority/weight semantics,
+  deployment-name parity, and how this compares to Azure OpenAI's service-side
+  `spilloverDeploymentName`.
 - Set `create_demo_clients = false` — real consumers bring their own Entra clients and
   are granted a tier app-role.
 

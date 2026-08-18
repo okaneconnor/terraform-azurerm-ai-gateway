@@ -131,8 +131,9 @@ locals {
   # ("${var.name_prefix}-fdry-${local.suffix}"): same prefix source and same
   # local.suffix, with the member key inserted for uniqueness across members.
   # lower() + substr(...,0,63) are defensive (foundry_name needs neither since
-  # var.name_prefix is length-validated and has no member key appended) because
-  # member keys are consumer-chosen map keys with no length/case constraint.
+  # var.name_prefix is length-validated and has no member key appended); member
+  # keys are validated in variables.tf (^[a-z0-9]([a-z0-9-]{0,22}[a-z0-9])?$) so
+  # this is belt-and-braces, not load-bearing.
   member_account_name = { for k, m in local.created_members : k =>
     substr(lower("${var.name_prefix}-fdry-${k}-${local.suffix}"), 0, 63)
   }
