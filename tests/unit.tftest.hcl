@@ -962,3 +962,53 @@ run "rejects_member_with_both_account_and_url" {
   }
   expect_failures = [var.backend_pool]
 }
+
+run "created_member_provisions_account_and_role" {
+  command = plan
+  variables {
+    # Scoped to just "chat" so the member's create_account deployments satisfy
+    # the parity validation (module model_deployments has 2 keys globally).
+    model_deployments = {
+      chat = { model_name = "chat-model", model_version = "1", sku_name = "Standard" }
+    }
+    backend_pool = {
+      members = {
+        payg = {
+          priority = 2
+          create_account = {
+            model_deployments = {
+              chat = { model_name = "chat-model", model_version = "1", sku_name = "Standard" }
+            }
+          }
+        }
+      }
+    }
+  }
+  assert {
+    condition     = azurerm_cognitive_account.member["payg"].kind == "AIServices"
+    error_message = "create_account member must provision an AIServices account."
+  }
+  assert {
+    condition     = azurerm_cognitive_account.member["payg"].public_network_access_enabled == false
+    error_message = "Member accounts must be private (public network access disabled)."
+  }
+  assert {
+    condition     = azurerm_role_assignment.member_openai["payg"].role_definition_name == "Cognitive Services OpenAI User"
+    error_message = "Member account must grant the APIM MI Cognitive Services OpenAI User."
+  }
+}
+
+run "rejects_member_missing_deployment_parity" {
+  command = plan
+  variables {
+    # module var.model_deployments has "chat" + "text-embedding-ada-002" (global
+    # variables block); member omits "text-embedding-ada-002" -> parity failure.
+    backend_pool = {
+      members = { payg = {
+        priority       = 2
+        create_account = { model_deployments = { chat = { model_name = "chat-model", model_version = "1", sku_name = "Standard" } } }
+      } }
+    }
+  }
+  expect_failures = [var.backend_pool]
+}

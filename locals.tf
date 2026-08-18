@@ -118,4 +118,14 @@ locals {
     trip_on_429        = coalesce(try(m.circuit_breaker.trip_on_429, null), var.circuit_breaker.trip_on_429)
     accept_retry_after = coalesce(try(m.circuit_breaker.accept_retry_after, null), var.circuit_breaker.accept_retry_after)
   } }
+
+  # Member Cognitive account names mirror local.foundry_name's convention
+  # ("${var.name_prefix}-fdry-${local.suffix}"): same prefix source and same
+  # local.suffix, with the member key inserted for uniqueness across members.
+  # lower() + substr(...,0,63) are defensive (foundry_name needs neither since
+  # var.name_prefix is length-validated and has no member key appended) because
+  # member keys are consumer-chosen map keys with no length/case constraint.
+  member_account_name = { for k, m in local.created_members : k =>
+    substr(lower("${var.name_prefix}-fdry-${k}-${local.suffix}"), 0, 63)
+  }
 }
