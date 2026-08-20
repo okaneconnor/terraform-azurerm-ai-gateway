@@ -88,6 +88,23 @@ Every member's breaker always trips on 5xx regardless of `trip_on_429` — that 
 adds the `429` status range to the failure condition. `output.backend_pool_members`
 surfaces each member's effective `trip_on_429` so you can confirm the override applied.
 
+## Circuit-breaker failover: what actually trips it
+
+APIM's backend circuit breaker counts backend **responses** — it trips only when a
+member *responds* with a status code inside the configured `statusCodeRanges` (5xx
+always; `429` too when `trip_on_429 = true`). It does **not** trip on connection-level
+failures to an unreachable endpoint: a DNS failure, TCP refusal, or TLS error surfaces to
+the caller as `BackendConnectionFailure` (HTTP `500`), and this was live-verified to
+**not** trip the breaker — even with `errorReasons` included in the failure condition.
+
+Practically: the pool fails over to the next priority group when a member **returns**
+`429` (PTU exhausted — the Microsoft-documented spillover trigger) or a `5xx` response.
+A member whose endpoint is simply **down or unreachable** will not trip its breaker and
+so will not trigger priority failover — requests routed to it will fail with
+`BackendConnectionFailure` instead of spilling to a lower-priority member. This is Azure
+platform behavior (how the backend circuit breaker is implemented), not something this
+module configures or can change.
+
 ## Deployment-name parity
 
 The gateway routes by the deployment name in the request path
@@ -253,6 +270,30 @@ identical for every Azure OpenAI / Foundry endpoint. `create_account` members ge
 members, set `managed_identity_scope_id` to the member's resource ID and the module
 grants the same role — or grant it yourself out-of-band and leave
 `managed_identity_scope_id` unset.
+
+## Changing pool membership
+
+Members can be added, removed, or swapped for a different member (same key, new
+endpoint) freely — each of these converges in a single `terraform apply`, including
+removing **several members at once** (live-verified).
+
+Removal needs a little help under the hood: Azure rejects deleting a backend that's
+still referenced by a pool (`"Backend Entity ... is referenced in Backend Pool ... and
+cannot be deleted"`), but Terraform's core dependency graph destroys a removed member's
+backend *before* it updates the pool to drop that member — the dependency edge that
+would order these correctly disappears the moment the member leaves the `for_each` map
+(a by-design Terraform core limitation:
+[hashicorp/terraform#32153](https://github.com/hashicorp/terraform/issues/32153)). To
+close that gap, the module provisions a per-member destroy-time cleanup action
+(`azapi_resource_action.pool_member_cleanup`) that PATCHes the pool down to the primary
+member *first*, at destroy time, before the removed member's backend is deleted — so the
+backend is always unreferenced by the time Terraform deletes it.
+
+One visible trade-off: between that cleanup PATCH and the pool's own update (which runs
+last in the same apply), the pool briefly holds the primary only — surviving members are
+re-attached moments later in the same apply. The primary keeps serving throughout, so
+this is a momentary narrowing of the pool, not an outage. You don't need to do anything
+manual for any of this — add / remove / swap, single or multiple members, all just work.
 
 ## Output
 

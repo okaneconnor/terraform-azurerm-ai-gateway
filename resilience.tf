@@ -113,13 +113,23 @@ resource "azapi_resource" "foundry_pool" {
 # delete backend" simply vanishes.
 #
 # The fix: one destroy-time twin per member. Because this action depends_on the member
-# backends, on removal Terraform destroys the twin (firing a PATCH that rewrites the
-# pool WITHOUT this member) BEFORE it destroys the member's backend — so the backend is
-# already unreferenced when its DELETE runs. Ids are built as strings (not resource-
-# attribute refs) to avoid a cycle back through the pool. Covers single-member add /
-# remove and 1-for-1 swap in one apply; removing 2+ members in a SINGLE apply is not
-# guaranteed (each twin's stored body predates the others' removal) — remove members one
-# apply at a time. See docs/backend-pool.md.
+# backends, on removal Terraform destroys the twin BEFORE the member's backend — and the
+# twin's PATCH detaches members from the pool, so the backend is already unreferenced
+# when its DELETE runs. Terraform then updates foundry_pool (which runs last) to the
+# final desired membership.
+#
+# The PATCH deliberately resets the pool to the PRIMARY ONLY rather than "every member
+# except me". Each action's body is frozen at its last apply, so a per-member body goes
+# stale the moment a sibling is also removed: destroying two twins at once made each
+# re-add the other, the last writer won, and the surviving member's DELETE failed — an
+# unrecoverable state, since its twin was gone too and no later apply could detach it.
+# A primary-only body is identical for every member, so concurrent destroys are
+# idempotent and any number of members can be removed in one apply. Ids are built as
+# strings (not resource-attribute refs) to avoid a cycle back through the pool.
+#
+# Trade-off: between the twin's PATCH and the pool update, the pool briefly holds only
+# the primary — surviving members are re-attached moments later in the same apply, and
+# the primary keeps serving throughout. See docs/backend-pool.md.
 resource "azapi_resource_action" "pool_member_cleanup" {
   for_each    = local.pool_members
   type        = "Microsoft.ApiManagement/service/backends@2024-06-01-preview"
@@ -132,18 +142,11 @@ resource "azapi_resource_action" "pool_member_cleanup" {
     properties = {
       type = "Pool"
       pool = {
-        services = concat(
-          [{
-            id       = "${azurerm_api_management.apim.id}/backends/${azapi_resource.foundry_member.name}"
-            priority = var.backend_pool.primary_priority
-            weight   = var.backend_pool.primary_weight
-          }],
-          [for k, m in local.pool_members : {
-            id       = "${azurerm_api_management.apim.id}/backends/foundry-member-${k}"
-            priority = m.priority
-            weight   = m.weight
-          } if k != each.key],
-        )
+        services = [{
+          id       = "${azurerm_api_management.apim.id}/backends/${azapi_resource.foundry_member.name}"
+          priority = var.backend_pool.primary_priority
+          weight   = var.backend_pool.primary_weight
+        }]
       }
     }
   }

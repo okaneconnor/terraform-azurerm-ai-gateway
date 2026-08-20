@@ -43,6 +43,12 @@ All notable changes to this module are documented here. The format follows
   matches — APIM records backend-health failures as `PoolIsInactive` (breaker open),
   `BackendConnectionFailure`, etc. The alert would have stayed silent on real failures;
   KQL corrected to those reasons. (Both caught by live behavioral testing, not plan checks.)
+- **Backend-pool member removal**: removing or swapping a pool member failed with
+  `Backend Entity ... is referenced in Backend Pool ... and cannot be deleted` — Terraform
+  destroys the member's backend before updating the pool (a by-design core limitation,
+  hashicorp/terraform#32153). Each member now gets a destroy-time cleanup action that
+  detaches it from the pool first, so add / remove / swap — including removing several
+  members in one apply — all converge in a single apply (live-verified).
 - **`docs/usage.md` smoke-test examples used `max_tokens`**, which the GPT-5-family
   models these examples target reject with a 400 (`Unsupported parameter … use
   'max_completion_tokens'`). The examples now use `max_completion_tokens`, matching the

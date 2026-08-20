@@ -1109,3 +1109,26 @@ run "byo_member_backend_created" {
     error_message = "Each pool member must produce a Single backend named foundry-member-<key>."
   }
 }
+
+run "member_cleanup_twin_created_per_member" {
+  command = plan
+  variables {
+    backend_pool = {
+      members = {
+        ptu = { endpoint_url = "https://my-ptu.openai.azure.com/", priority = 1 }
+      }
+    }
+  }
+  assert {
+    condition     = length(azapi_resource_action.pool_member_cleanup) == 1
+    error_message = "Each pool member must get a destroy-time cleanup twin."
+  }
+  assert {
+    condition     = azapi_resource_action.pool_member_cleanup["ptu"].when == "destroy"
+    error_message = "The pool-member cleanup action must run at destroy time."
+  }
+  assert {
+    condition     = azapi_resource_action.pool_member_cleanup["ptu"].method == "PATCH"
+    error_message = "The pool-member cleanup action must PATCH the pool to detach the member."
+  }
+}
