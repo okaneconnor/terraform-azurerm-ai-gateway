@@ -40,7 +40,6 @@ resource "azurerm_cognitive_deployment" "model" {
   version_upgrade_option = "NoAutoUpgrade"
 }
 
-# Embeddings backend used by llm-semantic-cache-lookup to vectorise prompts.
 resource "azurerm_api_management_backend" "embeddings" {
   #checkov:skip=CKV_AZURE_215:"protocol" is the APIM backend type (http|soap), not the wire scheme — the url is the private HTTPS Foundry endpoint reached over TLS.
   for_each            = var.semantic_cache.enabled ? { this = {} } : {}

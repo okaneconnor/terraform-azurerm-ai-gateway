@@ -1,11 +1,4 @@
-# Opt-in resource-group consumption budget (var.budget, default off). Azure OpenAI has
-# no hard spend cap and the per-tier token quotas only bound each consumer, not the
-# total — this bounds total RG spend and notifies on actual + forecasted overspend.
-# Notifications go to var.budget.contact_emails and, when alerting is enabled (or an
-# action group is supplied), to that action group too.
-
 locals {
-  # The budget's own action group (if supplied) plus the var.alerts action group.
   budget_action_groups = distinct(compact(concat(
     var.budget.action_group_id != null ? [var.budget.action_group_id] : [],
     local.action_group_ids,

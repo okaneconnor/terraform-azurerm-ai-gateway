@@ -1,14 +1,8 @@
-# Opt-in alerting (var.alerts, default off). Creates an action group (or reuses one
-# the caller passes) and a set of metric + log-query alerts covering the failure modes
-# we actually hit: capacity pressure, gateway 5xx, sustained throttling (429), backend
-# connection failures, and a model deployment approaching its token-per-minute quota.
-
 locals {
   create_action_group = var.alerts.enabled && var.alerts.existing_action_group_id == null
   action_group_id = var.alerts.existing_action_group_id != null ? var.alerts.existing_action_group_id : (
     var.alerts.enabled ? azurerm_monitor_action_group.main["this"].id : null
   )
-  # For alert `action`/`action_groups` blocks — empty list when there's no group.
   action_group_ids = local.action_group_id != null ? [local.action_group_id] : []
 }
 
@@ -28,7 +22,6 @@ resource "azurerm_monitor_action_group" "main" {
   }
 }
 
-# APIM capacity (percent) above threshold — the gateway is running hot.
 resource "azurerm_monitor_metric_alert" "apim_capacity" {
   for_each            = var.alerts.enabled ? { this = {} } : {}
   name                = "${var.name_prefix}-apim-capacity-${local.suffix}"
@@ -53,8 +46,6 @@ resource "azurerm_monitor_metric_alert" "apim_capacity" {
   }
 }
 
-# Gateway 5xx responses over the window (5xx is unambiguous — unlike 4xx, which is
-# dominated by the normal 401s this keyless gateway returns to unauthenticated probes).
 resource "azurerm_monitor_metric_alert" "gateway_5xx" {
   for_each            = var.alerts.enabled ? { this = {} } : {}
   name                = "${var.name_prefix}-gateway-5xx-${local.suffix}"
@@ -85,8 +76,6 @@ resource "azurerm_monitor_metric_alert" "gateway_5xx" {
   }
 }
 
-# A model deployment approaching its TPM quota — only when the caller sets a threshold
-# (tokens/minute) near their deployment's limit.
 resource "azurerm_monitor_metric_alert" "model_tokens" {
   for_each            = var.alerts.enabled && var.alerts.model_tokens_per_min_threshold != null ? { this = {} } : {}
   name                = "${var.name_prefix}-model-tokens-${local.suffix}"
@@ -111,8 +100,6 @@ resource "azurerm_monitor_metric_alert" "model_tokens" {
   }
 }
 
-# Sustained throttling (429) — precise via the log table, since 429 can't be isolated
-# from the 4xx metric dimension.
 resource "azurerm_monitor_scheduled_query_rules_alert_v2" "throttle_429" {
   for_each             = var.alerts.enabled ? { this = {} } : {}
   name                 = "${var.name_prefix}-throttle-429-${local.suffix}"
@@ -142,7 +129,6 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "throttle_429" {
   }
 }
 
-# Backend connection failures — the real BackendConnectionFailure we saw under burst.
 resource "azurerm_monitor_scheduled_query_rules_alert_v2" "backend_failures" {
   for_each             = var.alerts.enabled ? { this = {} } : {}
   name                 = "${var.name_prefix}-backend-failures-${local.suffix}"
@@ -156,9 +142,6 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "backend_failures" {
   tags                 = var.tags
 
   criteria {
-    # APIM records backend-health failures as these LastErrorReason values — notably
-    # PoolIsInactive when the circuit breaker has opened. (An earlier `has "Backend"`
-    # match never fired: real reasons are PoolIsInactive / BackendConnectionFailure.)
     query                   = "ApiManagementGatewayLogs | where LastErrorReason in ('PoolIsInactive', 'BackendConnectionFailure', 'BackendConnectionTerminated', 'BackendTimeout')"
     time_aggregation_method = "Count"
     threshold               = var.alerts.backend_failure_threshold

@@ -1,7 +1,3 @@
-# APIM in External VNet mode with availability zones requires a customer-assigned,
-# zone-redundant Standard public IP (Azure rejects the deployment with
-# PublicIpAddressIdMustBeUnique otherwise). Created only for that combination —
-# Developer and Internal mode do not use it.
 resource "azurerm_public_ip" "apim" {
   #checkov:skip=CKV_AZURE_116:This IP fronts APIM's External-mode gateway (gated by mandatory Entra JWT + IP filter); zonal APIM requires a customer-assigned Standard IP here.
   for_each            = var.apim_zones != null && var.apim_virtual_network_type == "External" ? { this = {} } : {}
@@ -31,7 +27,6 @@ resource "azurerm_api_management" "apim" {
     type = "SystemAssigned"
   }
 
-  # TLS hardening: reject SSL3 / TLS 1.0 / TLS 1.1 and 3DES on both frontend and backend.
   security {
     backend_ssl30_enabled  = false
     backend_tls10_enabled  = false
@@ -48,7 +43,6 @@ resource "azurerm_api_management" "apim" {
     subnet_id = local.apim_subnet_id
   }
 
-  # VNet changes on APIM are slow; give it room.
   timeouts {
     create = "3h"
     update = "3h"

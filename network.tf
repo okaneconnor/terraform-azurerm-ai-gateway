@@ -1,7 +1,3 @@
-# Network: created by default, or skipped entirely when var.existing_network is set
-# (BYO VNet/subnets for landing-zone adoption). When BYO, you own the APIM subnet's
-# NSG — see README for the required APIM inbound/outbound rules.
-
 resource "azurerm_virtual_network" "main" {
   for_each            = local.create_network ? { this = {} } : {}
   name                = "${var.name_prefix}-vnet-${local.suffix}"

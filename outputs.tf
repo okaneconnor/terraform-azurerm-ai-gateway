@@ -1,5 +1,3 @@
-# ── Gateway ──────────────────────────────────────────────────────────────────
-
 output "apim_gateway_url" {
   description = "APIM gateway base URL."
   value       = azurerm_api_management.apim.gateway_url
@@ -19,8 +17,6 @@ output "apim_principal_id" {
   description = "APIM system-assigned managed identity principal ID — grant it roles on your own resources (e.g. additional Cognitive accounts) to extend the gateway."
   value       = azurerm_api_management.apim.identity[0].principal_id
 }
-
-# ── Identity / auth ──────────────────────────────────────────────────────────
 
 output "tenant_id" {
   description = "Entra tenant the gateway app lives in."
@@ -43,8 +39,6 @@ output "demo_clients" {
   sensitive = true
 }
 
-# ── Models / backends ────────────────────────────────────────────────────────
-
 output "model_deployment_names" {
   description = "Deployment names exposed at /openai/deployments/<name>/... on the gateway."
   value       = keys(var.model_deployments)
@@ -64,8 +58,6 @@ output "foundry_endpoint" {
   description = "Foundry account endpoint (private; resolvable only inside the VNet)."
   value       = azurerm_cognitive_account.foundry.endpoint
 }
-
-# ── Resource group / network (peering & integration) ─────────────────────────
 
 output "resource_group_name" {
   description = "Resource group containing the gateway stack."
@@ -97,8 +89,6 @@ output "private_dns_zone_ids" {
   value       = local.private_dns_zone_ids
 }
 
-# ── Observability ────────────────────────────────────────────────────────────
-
 output "log_analytics_workspace_resource_id" {
   description = "Log Analytics workspace ARM resource ID (module-created or bring-your-own)."
   value       = local.log_analytics_workspace_id
@@ -119,8 +109,6 @@ output "application_insights_connection_string" {
   value       = local.app_insights_connection_string
   sensitive   = true
 }
-
-# ── Optional components ──────────────────────────────────────────────────────
 
 output "key_vault_id" {
   description = "Key Vault resource ID (null when key_vault.enabled = false)."
@@ -146,8 +134,6 @@ output "alerts_action_group_id" {
   description = "Action group used by alerts/budget notifications (created or bring-your-own); null when alerting is off."
   value       = local.action_group_id
 }
-
-# ── Backend pool (#15) ────────────────────────────────────────────────────────
 
 output "backend_pool_members" {
   description = "Backend pool members and their priority/weight/kind (includes the module's Foundry account as 'primary')."

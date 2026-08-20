@@ -5,7 +5,6 @@ resource "azurerm_policy_definition" "allowed_deployment_skus" {
   mode         = "All"
   display_name = "Allow only approved Cognitive Services model-deployment SKUs (${var.name_prefix}-${local.suffix})"
 
-  # Policy rule lives in policies/ (like the APIM policy files) rather than inline.
   policy_rule = templatefile("${path.module}/policies/deployment-sku-allowlist.json", {
     allowed_sku_names = jsonencode(var.deployment_sku_policy.allowed_sku_names)
   })

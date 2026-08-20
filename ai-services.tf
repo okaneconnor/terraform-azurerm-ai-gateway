@@ -9,7 +9,6 @@ resource "azurerm_cognitive_account" "svc" {
   custom_subdomain_name = "${var.name_prefix}-${each.value.short_name}-${local.suffix}"
   tags                  = var.tags
 
-  # Entra-only: APIM reaches these via managed identity; account keys stay off.
   local_auth_enabled = false
 
   public_network_access_enabled = false

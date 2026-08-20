@@ -1,10 +1,3 @@
-# Service-side diagnostics for the model + backend layer. The APIM diagnostic
-# (monitoring.tf) captures the gateway's view; these route what the Cognitive
-# accounts, Key Vault and Managed Redis themselves emit (audit, request/response,
-# metrics) to the same Log Analytics workspace, so a model-layer failure has a
-# service-side trace and not just what APIM saw. Toggle off (enable_backend_diagnostics
-# = false) when diagnostics are managed centrally by Azure Policy.
-
 resource "azurerm_monitor_diagnostic_setting" "foundry" {
   for_each                   = var.enable_backend_diagnostics ? { this = {} } : {}
   name                       = "diag-to-law"
@@ -51,7 +44,5 @@ resource "azurerm_monitor_diagnostic_setting" "redis" {
   target_resource_id         = azurerm_managed_redis.cache["this"].id
   log_analytics_workspace_id = local.log_analytics_workspace_id
 
-  # Azure Managed Redis (redisEnterprise) exposes no diagnostic LOG categories —
-  # metrics only. Setting category_group="allLogs" here 400s "not supported".
   enabled_metric { category = "AllMetrics" }
 }

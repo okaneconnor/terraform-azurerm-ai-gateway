@@ -1,9 +1,7 @@
 resource "azurerm_monitor_diagnostic_setting" "apim" {
-  name                       = "apim-to-law"
-  target_resource_id         = azurerm_api_management.apim.id
-  log_analytics_workspace_id = local.log_analytics_workspace_id
-  # REQUIRED for the resource-specific tables to populate. Without "Dedicated",
-  # logs land in the generic AzureDiagnostics table and those tables stay empty.
+  name                           = "apim-to-law"
+  target_resource_id             = azurerm_api_management.apim.id
+  log_analytics_workspace_id     = local.log_analytics_workspace_id
   log_analytics_destination_type = "Dedicated"
 
   enabled_log { category = "GatewayLogs" }

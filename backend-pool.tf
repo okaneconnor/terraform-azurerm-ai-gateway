@@ -1,6 +1,3 @@
-# Additional load-balanced pool members that the module provisions (create_account).
-# BYO members (endpoint_url) don't create accounts here — only backends (resilience.tf).
-
 resource "azurerm_cognitive_account" "member" {
   #checkov:skip=CKV2_AZURE_22:Microsoft-managed keys by design; CMK is a consumer/org choice, not forced by this generic module.
   for_each              = local.created_members

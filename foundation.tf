@@ -10,8 +10,6 @@ data "azurerm_resource_group" "existing" {
   name     = var.existing_resource_group_name
 }
 
-# Log Analytics — created by default, or bring-your-own via
-# var.existing_log_analytics_workspace_id (central-logging pattern).
 resource "azurerm_log_analytics_workspace" "law" {
   for_each            = local.create_law ? { this = {} } : {}
   name                = local.law_name
@@ -22,8 +20,6 @@ resource "azurerm_log_analytics_workspace" "law" {
   tags                = var.tags
 }
 
-# Application Insights — created by default, or bring-your-own via
-# var.existing_application_insights.
 resource "azurerm_application_insights" "ai" {
   for_each            = local.create_app_insights ? { this = {} } : {}
   name                = local.ai_name
