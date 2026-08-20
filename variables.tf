@@ -1,5 +1,3 @@
-# ── Core ─────────────────────────────────────────────────────────────────────
-
 variable "location" {
   description = "Azure region for all resources. Choose a region where your chat + embeddings models are available with the deployment SKUs you allow (see deployment_sku_policy)."
   type        = string
@@ -38,8 +36,6 @@ variable "existing_resource_group_name" {
   type        = string
   default     = null
 }
-
-# ── API Management ───────────────────────────────────────────────────────────
 
 variable "publisher_name" {
   description = "APIM publisher name (shown in the developer portal)."
@@ -134,8 +130,6 @@ variable "allowed_client_cidrs" {
   }
 }
 
-# ── Network ──────────────────────────────────────────────────────────────────
-
 variable "network" {
   description = "VNet and subnet CIDRs for the module-created network. Ignored when existing_network is set. APIM is injected into the apim subnet; all backends are reached via private endpoints in the pe subnet."
   type = object({
@@ -175,8 +169,6 @@ variable "existing_private_dns_zone_ids" {
   default     = {}
 }
 
-# ── Observability (bring-your-own optional) ──────────────────────────────────
-
 variable "existing_log_analytics_workspace_id" {
   description = "Bring-your-own Log Analytics workspace (Azure resource ID) for diagnostics — common when an org centralises logs. Leave null to create one."
   type        = string
@@ -209,8 +201,6 @@ variable "enable_workbook" {
   type        = bool
   default     = true
 }
-
-# ── Model deployments (Foundry / Azure OpenAI) ───────────────────────────────
 
 variable "foundry_account_sku" {
   description = "SKU for the Foundry (AIServices) Cognitive account that hosts your model deployments."
@@ -250,8 +240,6 @@ variable "model_deployments" {
     error_message = "Every model deployment sku_name must be in deployment_sku_policy.allowed_sku_names while the SKU policy is enabled. Choose a model SKU in the allowlist, or add the SKU (note: Global*/DataZone* SKUs process data outside the deployment region — a residency trade-off)."
   }
 }
-
-# ── Consumption tiers ────────────────────────────────────────────────────────
 
 variable "tiers" {
   description = <<-EOT
@@ -294,8 +282,6 @@ variable "tiers" {
     error_message = "Each tier needs a unique app_role value."
   }
   validation {
-    # Matches Entra's app-role value charset AND keeps the value safe to render into
-    # the policy XML (no quotes / XML metacharacters that could break the fragment).
     condition     = alltrue([for t in var.tiers : can(regex("^[A-Za-z0-9._-]+$", t.app_role))])
     error_message = "Each tier app_role must match ^[A-Za-z0-9._-]+$ (Entra app-role value charset; no spaces or XML metacharacters)."
   }
@@ -322,8 +308,6 @@ variable "rate_limit_renewal_seconds" {
   type        = number
   default     = 60
 }
-
-# ── Optional AI services exposed through the gateway ─────────────────────────
 
 variable "ai_services" {
   description = <<-EOT
@@ -372,8 +356,6 @@ variable "ai_services" {
   }
 }
 
-# ── AI gateway policies ──────────────────────────────────────────────────────
-
 variable "content_safety" {
   description = "Prompt screening via llm-content-safety (+ Prompt Shield). Runs BEFORE the semantic cache so every prompt is screened, including ones answered from cache. Requires an ai_services entry of kind ContentSafety. Set enforce_on_completions=true to ALSO screen model OUTPUTS (completions): non-streaming violations return 403; for streaming responses the handler buffers events and cuts the connection on a violation (no 403)."
   type = object({
@@ -419,6 +401,87 @@ variable "semantic_cache" {
   }
 }
 
+variable "backend_pool" {
+  description = <<-EOT
+    Multi-member load-balanced backend pool for the Foundry backend. The module's
+    own Foundry account is always a member (primary_priority / primary_weight); add
+    `members` for the PTU-priority + PAYG-spillover pattern — a Provisioned member at
+    priority 1 with Standard members as overflow at priority 2. Lower-priority members
+    receive traffic only when every higher-priority member's circuit breaker has
+    tripped. Each member is EITHER module-created (`create_account`) OR bring-your-own
+    (`endpoint_url`) — exactly one. Default {} reproduces the single-member pool.
+    Max 30 members total (Azure limit). Set circuit_breaker.trip_on_429 = true on a
+    PTU member so 429 (PTU exhausted) spills to PAYG.
+  EOT
+  type = object({
+    primary_priority = optional(number, 1)
+    primary_weight   = optional(number, 100)
+    members = optional(map(object({
+      create_account = optional(object({
+        location = optional(string)
+        sku_name = optional(string, "S0")
+        model_deployments = map(object({
+          model_name    = string
+          model_version = string
+          sku_name      = optional(string, "Standard")
+          capacity      = optional(number, 10)
+          model_format  = optional(string, "OpenAI")
+        }))
+      }))
+      endpoint_url              = optional(string)
+      managed_identity_scope_id = optional(string)
+      priority                  = optional(number, 2)
+      weight                    = optional(number, 100)
+      circuit_breaker = optional(object({
+        enabled            = optional(bool)
+        failure_count      = optional(number)
+        interval           = optional(string)
+        trip_duration      = optional(string)
+        trip_on_429        = optional(bool)
+        accept_retry_after = optional(bool)
+      }))
+    })), {})
+  })
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for k, m in var.backend_pool.members :
+      (m.create_account != null) != (m.endpoint_url != null)
+    ])
+    error_message = "Each backend_pool.members entry must set exactly one of create_account or endpoint_url."
+  }
+  validation {
+    condition = alltrue([
+      for k, m in var.backend_pool.members :
+      m.priority >= 1 && m.priority <= 100 && m.weight >= 1 && m.weight <= 100
+    ])
+    error_message = "backend_pool.members: priority and weight must each be 1..100 (Azure BackendPoolItem limits)."
+  }
+  validation {
+    condition     = var.backend_pool.primary_priority >= 1 && var.backend_pool.primary_priority <= 100 && var.backend_pool.primary_weight >= 1 && var.backend_pool.primary_weight <= 100
+    error_message = "backend_pool.primary_priority and primary_weight must each be 1..100 (Azure BackendPoolItem limits)."
+  }
+  validation {
+    condition     = 1 + length(var.backend_pool.members) <= 30
+    error_message = "A backend pool supports at most 30 members including the primary (Azure limit)."
+  }
+  validation {
+    condition = alltrue([
+      for k, m in var.backend_pool.members :
+      m.create_account == null ? true :
+      length(setsubtract(keys(var.model_deployments), keys(m.create_account.model_deployments))) == 0
+    ])
+    error_message = "Each create_account member must declare a deployment for every name in var.model_deployments (parity for transparent failover)."
+  }
+  validation {
+    condition = alltrue([
+      for k, m in var.backend_pool.members : can(regex("^[a-z0-9]([a-z0-9-]{0,22}[a-z0-9])?$", k))
+    ])
+    error_message = "backend_pool.members keys must be 1-24 chars, lowercase alphanumeric or hyphen, starting and ending alphanumeric (they form Azure Cognitive account names)."
+  }
+}
+
 variable "circuit_breaker" {
   description = <<-EOT
     Circuit breaker on the Foundry backend. Default trips on 5xx only: with a
@@ -436,8 +499,6 @@ variable "circuit_breaker" {
   })
   default = {}
 }
-
-# ── Governance ───────────────────────────────────────────────────────────────
 
 variable "deployment_sku_policy" {
   description = <<-EOT
@@ -460,8 +521,6 @@ variable "enable_api_center" {
   default     = true
 }
 
-# ── Key Vault (optional, for consumer workloads) ─────────────────────────────
-
 variable "key_vault" {
   description = <<-EOT
     Optional private Key Vault (RBAC, purge protection, private endpoint) for
@@ -477,8 +536,6 @@ variable "key_vault" {
   })
   default = {}
 }
-
-# ── Entra ────────────────────────────────────────────────────────────────────
 
 variable "existing_gateway_app" {
   description = <<-EOT
@@ -503,9 +560,6 @@ variable "create_demo_clients" {
     error_message = "create_demo_clients requires the module-created gateway app (existing_gateway_app must be null) so role assignments can reference its role IDs."
   }
 }
-
-
-# ── Observability & cost add-ons (issues #9, #10, #11, #21) ───────────────────
 
 variable "enable_backend_diagnostics" {
   description = "Route service-side diagnostics (audit, request/response, metrics) from the Foundry + Cognitive Services accounts, Key Vault, and Managed Redis to the Log Analytics workspace. Off if diagnostics are enforced centrally by Azure Policy."

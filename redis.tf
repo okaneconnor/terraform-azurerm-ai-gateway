@@ -1,6 +1,3 @@
-# Semantic-cache store: Azure Managed Redis with RediSearch (required by APIM's
-# llm-semantic-cache policies). Entirely skipped when semantic_cache.enabled = false.
-
 resource "azurerm_managed_redis" "cache" {
   for_each            = var.semantic_cache.enabled ? { this = {} } : {}
   name                = local.redis_name

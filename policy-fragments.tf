@@ -68,7 +68,6 @@ resource "azurerm_api_management_policy_fragment" "tier_rate" {
     renewal = var.rate_limit_renewal_seconds
   })
 
-  # The rendered branches read the caller-app-id variable set by the JWT fragment.
   depends_on = [azurerm_api_management_policy_fragment.entra_jwt]
 }
 

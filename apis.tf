@@ -1,6 +1,3 @@
-# One APIM backend per AI service. The API policy references the backend by this
-# resource's name, so adding an ai_services entry wires account -> backend -> API
-# -> policy in one change with real dependency edges (no free-text coupling).
 resource "azurerm_api_management_backend" "svc" {
   #checkov:skip=CKV_AZURE_215:"protocol" is the APIM backend type (http|soap), not the wire scheme — the url is the private HTTPS Cognitive Services endpoint reached over TLS.
   for_each            = var.ai_services

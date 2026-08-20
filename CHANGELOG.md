@@ -8,6 +8,12 @@ All notable changes to this module are documented here. The format follows
 
 ### Added
 
+- **Multi-member backend pool** (`var.backend_pool`, default single-member) — priority +
+  weight load balancing across multiple Foundry endpoints with per-member circuit breakers,
+  for the MS-recommended PTU-priority + PAYG-spillover pattern. Members are module-created
+  (a private AIServices account + deployments) or bring-your-own (`endpoint_url`). The APIM
+  managed identity is granted `Cognitive Services OpenAI User` on each module-created
+  member, and on BYO members that supply `managed_identity_scope_id`. (#15)
 - **Backend diagnostic settings** (`enable_backend_diagnostics`, default on) — route
   Foundry / Cognitive Services / Key Vault / Managed Redis service logs + metrics to Log
   Analytics, so the model layer has a service-side trace, not just APIM's view (#9).
@@ -37,6 +43,12 @@ All notable changes to this module are documented here. The format follows
   matches — APIM records backend-health failures as `PoolIsInactive` (breaker open),
   `BackendConnectionFailure`, etc. The alert would have stayed silent on real failures;
   KQL corrected to those reasons. (Both caught by live behavioral testing, not plan checks.)
+- **Backend-pool member removal**: removing or swapping a pool member failed with
+  `Backend Entity ... is referenced in Backend Pool ... and cannot be deleted` — Terraform
+  destroys the member's backend before updating the pool (a by-design core limitation,
+  hashicorp/terraform#32153). Each member now gets a destroy-time cleanup action that
+  detaches it from the pool first, so add / remove / swap — including removing several
+  members in one apply — all converge in a single apply (live-verified).
 - **`docs/usage.md` smoke-test examples used `max_tokens`**, which the GPT-5-family
   models these examples target reject with a 400 (`Unsupported parameter … use
   'max_completion_tokens'`). The examples now use `max_completion_tokens`, matching the

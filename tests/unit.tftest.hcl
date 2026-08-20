@@ -896,3 +896,239 @@ run "backend_failures_kql_matches_real_reasons" {
     error_message = "backend_failures KQL must match APIM's real LastErrorReason values (e.g. PoolIsInactive when the breaker opens), not an unmatched 'has \"Backend\"'."
   }
 }
+
+# ── Multi-member backend pool (#15) ───────────────────────────────────────────
+
+run "backend_pool_default_single_member" {
+  command = plan
+  assert {
+    condition     = length(output.backend_pool_members) == 1
+    error_message = "Default backend_pool must yield a single (primary) member."
+  }
+  assert {
+    condition     = output.backend_pool_members["primary"].priority == 1
+    error_message = "Primary member must default to priority 1."
+  }
+}
+
+run "backend_pool_two_members_shape" {
+  command = plan
+  variables {
+    backend_pool = {
+      primary_priority = 2
+      members = {
+        ptu = {
+          endpoint_url              = "https://my-ptu.openai.azure.com/"
+          managed_identity_scope_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/mock-rg/providers/Microsoft.CognitiveServices/accounts/ptu"
+          priority                  = 1
+          circuit_breaker           = { trip_on_429 = true }
+        }
+      }
+    }
+  }
+  assert {
+    condition     = length(output.backend_pool_members) == 2
+    error_message = "Primary + one member must yield two pool members."
+  }
+  assert {
+    condition     = output.backend_pool_members["ptu"].kind == "byo"
+    error_message = "endpoint_url member must be classified byo."
+  }
+  assert {
+    condition     = output.backend_pool_members["ptu"].trip_on_429 == true
+    error_message = "Per-member circuit_breaker override must surface trip_on_429=true."
+  }
+  assert {
+    condition     = output.backend_pool_members["primary"].priority == 2
+    error_message = "primary_priority override must apply."
+  }
+  assert {
+    condition     = length(azapi_resource.foundry_pool.body.properties.pool.services) == 2
+    error_message = "Pool must contain the primary + one member."
+  }
+  assert {
+    condition     = [for s in azapi_resource.foundry_pool.body.properties.pool.services : s.priority] == [2, 1]
+    error_message = "Pool services must be [primary(priority 2), ptu(priority 1)] in order."
+  }
+}
+
+run "rejects_member_without_account_or_url" {
+  command = plan
+  variables {
+    backend_pool = { members = { bad = { priority = 2 } } }
+  }
+  expect_failures = [var.backend_pool]
+}
+
+run "rejects_member_with_both_account_and_url" {
+  command = plan
+  variables {
+    backend_pool = { members = { bad = {
+      endpoint_url   = "https://x.openai.azure.com/"
+      create_account = { model_deployments = { chat = { model_name = "chat-model", model_version = "1", sku_name = "Standard" } } }
+    } } }
+  }
+  expect_failures = [var.backend_pool]
+}
+
+run "rejects_weight_over_100" {
+  command = plan
+  variables {
+    backend_pool = { members = { ptu = {
+      endpoint_url = "https://x.openai.azure.com/"
+      priority     = 1
+      weight       = 300
+    } } }
+  }
+  expect_failures = [var.backend_pool]
+}
+
+run "rejects_priority_over_100" {
+  command = plan
+  variables {
+    backend_pool = { members = { ptu = {
+      endpoint_url = "https://x.openai.azure.com/"
+      priority     = 200
+    } } }
+  }
+  expect_failures = [var.backend_pool]
+}
+
+run "rejects_primary_weight_over_100" {
+  command = plan
+  variables {
+    backend_pool = { primary_weight = 300 }
+  }
+  expect_failures = [var.backend_pool]
+}
+
+run "created_member_provisions_account_and_role" {
+  command = plan
+  variables {
+    # Scoped to just "chat" so the member's create_account deployments satisfy
+    # the parity validation (module model_deployments has 2 keys globally).
+    model_deployments = {
+      chat = { model_name = "chat-model", model_version = "1", sku_name = "Standard" }
+    }
+    backend_pool = {
+      members = {
+        payg = {
+          priority = 2
+          create_account = {
+            model_deployments = {
+              chat = { model_name = "chat-model", model_version = "1", sku_name = "Standard" }
+            }
+          }
+        }
+      }
+    }
+  }
+  assert {
+    condition     = azurerm_cognitive_account.member["payg"].kind == "AIServices"
+    error_message = "create_account member must provision an AIServices account."
+  }
+  assert {
+    condition     = azurerm_cognitive_account.member["payg"].public_network_access_enabled == false
+    error_message = "Member accounts must be private (public network access disabled)."
+  }
+  assert {
+    condition     = azurerm_role_assignment.member_openai["payg"].role_definition_name == "Cognitive Services OpenAI User"
+    error_message = "Member account must grant the APIM MI Cognitive Services OpenAI User."
+  }
+}
+
+run "created_member_gets_backend_diagnostics" {
+  command = plan
+  variables {
+    model_deployments = {
+      chat = { model_name = "chat-model", model_version = "1", sku_name = "Standard" }
+    }
+    backend_pool = {
+      members = {
+        payg = {
+          priority = 2
+          create_account = {
+            model_deployments = {
+              chat = { model_name = "chat-model", model_version = "1", sku_name = "Standard" }
+            }
+          }
+        }
+      }
+    }
+  }
+  # log_analytics_workspace_id itself is unknown at plan (module-created LAW's .id
+  # is computed), so - mirroring backend_diagnostics_default_on above - assert on
+  # for_each existence rather than the unknown attribute value.
+  assert {
+    condition     = length(azurerm_monitor_diagnostic_setting.member) == 1
+    error_message = "Created member accounts must get a backend diagnostic setting when enable_backend_diagnostics is on."
+  }
+  assert {
+    condition     = contains(keys(azurerm_monitor_diagnostic_setting.member), "payg")
+    error_message = "Created member accounts must route backend diagnostics to Log Analytics."
+  }
+}
+
+run "rejects_member_missing_deployment_parity" {
+  command = plan
+  variables {
+    # module var.model_deployments has "chat" + "text-embedding-ada-002" (global
+    # variables block); member omits "text-embedding-ada-002" -> parity failure.
+    backend_pool = {
+      members = { payg = {
+        priority       = 2
+        create_account = { model_deployments = { chat = { model_name = "chat-model", model_version = "1", sku_name = "Standard" } } }
+      } }
+    }
+  }
+  expect_failures = [var.backend_pool]
+}
+
+run "rejects_invalid_member_key" {
+  command = plan
+  variables {
+    backend_pool = { members = { "Bad.Key_1" = { priority = 2, endpoint_url = "https://x.openai.azure.com/" } } }
+  }
+  expect_failures = [var.backend_pool]
+}
+
+run "byo_member_backend_created" {
+  command = plan
+  variables {
+    backend_pool = {
+      members = {
+        ptu = {
+          endpoint_url = "https://my-ptu.openai.azure.com/"
+          priority     = 1
+        }
+      }
+    }
+  }
+  assert {
+    condition     = azapi_resource.member_backend["ptu"].name == "foundry-member-ptu"
+    error_message = "Each pool member must produce a Single backend named foundry-member-<key>."
+  }
+}
+
+run "member_cleanup_twin_created_per_member" {
+  command = plan
+  variables {
+    backend_pool = {
+      members = {
+        ptu = { endpoint_url = "https://my-ptu.openai.azure.com/", priority = 1 }
+      }
+    }
+  }
+  assert {
+    condition     = length(azapi_resource_action.pool_member_cleanup) == 1
+    error_message = "Each pool member must get a destroy-time cleanup twin."
+  }
+  assert {
+    condition     = azapi_resource_action.pool_member_cleanup["ptu"].when == "destroy"
+    error_message = "The pool-member cleanup action must run at destroy time."
+  }
+  assert {
+    condition     = azapi_resource_action.pool_member_cleanup["ptu"].method == "PATCH"
+    error_message = "The pool-member cleanup action must PATCH the pool to detach the member."
+  }
+}

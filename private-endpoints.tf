@@ -14,6 +14,13 @@ locals {
         dns_zones   = ["cognitive", "openai", "aiservices"]
       }
     },
+    {
+      for k, m in local.created_members : "member-${k}" => {
+        resource_id = azurerm_cognitive_account.member[k].id
+        subresource = "account"
+        dns_zones   = ["cognitive", "openai", "aiservices"]
+      }
+    },
     var.key_vault.enabled ? {
       kv = {
         resource_id = azurerm_key_vault.main["this"].id

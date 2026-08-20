@@ -33,8 +33,42 @@ resource "azapi_resource" "foundry_member" {
   schema_validation_enabled = false
 }
 
-# Load-balanced pool fronting the member(s). Single member today; adding a
-# second member later is one more entry in pool.services.
+resource "azapi_resource" "member_backend" {
+  for_each  = local.pool_members
+  type      = "Microsoft.ApiManagement/service/backends@2024-06-01-preview"
+  name      = "foundry-member-${each.key}"
+  parent_id = azurerm_api_management.apim.id
+
+  body = {
+    properties = merge(
+      {
+        type     = "Single"
+        protocol = "http"
+        url      = local.member_endpoint[each.key]
+      },
+      local.member_cb[each.key].enabled ? {
+        circuitBreaker = {
+          rules = [{
+            name = "${each.key}Breaker"
+            failureCondition = {
+              count    = local.member_cb[each.key].failure_count
+              interval = local.member_cb[each.key].interval
+              statusCodeRanges = concat(
+                local.member_cb[each.key].trip_on_429 ? [{ min = 429, max = 429 }] : [],
+                [{ min = 500, max = 599 }],
+              )
+            }
+            tripDuration     = local.member_cb[each.key].trip_duration
+            acceptRetryAfter = local.member_cb[each.key].accept_retry_after
+          }]
+        }
+      } : {}
+    )
+  }
+
+  schema_validation_enabled = false
+}
+
 resource "azapi_resource" "foundry_pool" {
   type      = "Microsoft.ApiManagement/service/backends@2024-06-01-preview"
   name      = "foundry-pool"
@@ -44,14 +78,47 @@ resource "azapi_resource" "foundry_pool" {
     properties = {
       type = "Pool"
       pool = {
+        services = concat(
+          [{
+            id       = azapi_resource.foundry_member.id
+            priority = var.backend_pool.primary_priority
+            weight   = var.backend_pool.primary_weight
+          }],
+          [for k, m in local.pool_members : {
+            id       = azapi_resource.member_backend[k].id
+            priority = m.priority
+            weight   = m.weight
+          }],
+        )
+      }
+    }
+  }
+
+  locks = ["${azurerm_api_management.apim.id}/backends/foundry-pool"]
+
+  schema_validation_enabled = false
+}
+
+resource "azapi_resource_action" "pool_member_cleanup" {
+  for_each    = local.pool_members
+  type        = "Microsoft.ApiManagement/service/backends@2024-06-01-preview"
+  resource_id = "${azurerm_api_management.apim.id}/backends/foundry-pool"
+  method      = "PATCH"
+  when        = "destroy"
+  locks       = ["${azurerm_api_management.apim.id}/backends/foundry-pool"]
+
+  body = {
+    properties = {
+      type = "Pool"
+      pool = {
         services = [{
-          id       = azapi_resource.foundry_member.id
-          priority = 1
-          weight   = 100
+          id       = "${azurerm_api_management.apim.id}/backends/${azapi_resource.foundry_member.name}"
+          priority = var.backend_pool.primary_priority
+          weight   = var.backend_pool.primary_weight
         }]
       }
     }
   }
 
-  schema_validation_enabled = false
+  depends_on = [azapi_resource.member_backend]
 }

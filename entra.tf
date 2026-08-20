@@ -1,7 +1,3 @@
-# Gateway app registration: the audience clients request tokens for, carrying one
-# Application app role per tier. Skipped entirely when the consumer brings their
-# own app (var.existing_gateway_app) — locals.gateway_client_id abstracts the two.
-
 resource "random_uuid" "role" {
   for_each = var.existing_gateway_app == null ? var.tiers : {}
 }
@@ -35,10 +31,6 @@ resource "azuread_service_principal" "gateway" {
   client_id = azuread_application.gateway["this"].client_id
   owners    = [data.azuread_client_config.current.object_id]
 }
-
-# Optional demo clients — one per tier, each granted that tier's app role. Useful
-# for end-to-end testing; off by default so real deployments
-# don't ship unused credentials.
 
 resource "azuread_application" "demo" {
   for_each         = var.create_demo_clients ? var.tiers : {}
