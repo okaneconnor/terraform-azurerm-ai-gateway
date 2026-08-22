@@ -1,9 +1,9 @@
 resource "azurerm_policy_definition" "allowed_deployment_skus" {
   for_each     = var.deployment_sku_policy.enabled ? { this = {} } : {}
-  name         = "${var.name_prefix}-allowed-cogsvc-skus-${local.suffix}"
+  name         = "allowed-cogsvc-skus-${local.name_base}"
   policy_type  = "Custom"
   mode         = "All"
-  display_name = "Allow only approved Cognitive Services model-deployment SKUs (${var.name_prefix}-${local.suffix})"
+  display_name = "Allow only approved Cognitive Services model-deployment SKUs (${local.name_base})"
 
   policy_rule = templatefile("${path.module}/policies/deployment-sku-allowlist.json", {
     allowed_sku_names = jsonencode(var.deployment_sku_policy.allowed_sku_names)

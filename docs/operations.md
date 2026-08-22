@@ -54,12 +54,12 @@ terraform fmt -recursive          # format
 terraform validate                # validate (after: terraform init -backend=false)
 terraform test                    # plan-mode unit tests (mocked providers, no Azure creds)
 terraform-docs .                  # regenerate the Inputs/Outputs tables in the README
-tfsec . && checkov -d .           # static analysis (or: pre-commit run -a)
+trivy config . && checkov -d .    # static analysis (or: pre-commit run -a)
 ```
 
-Install the tooling with `brew install terraform-docs tfsec checkov pre-commit`. A
+Install the tooling with `brew install terraform-docs trivy checkov pre-commit`. A
 [`.pre-commit-config.yaml`](../.pre-commit-config.yaml) wires `fmt` → `validate` →
-`terraform-docs` → `tfsec` → `checkov` so they run on every commit (`pre-commit
+`terraform-docs` → `trivy` → `checkov` so they run on every commit (`pre-commit
 install`, or `pre-commit run -a` on demand).
 
 Both scanners run clean. The handful of checkov skips are documented inline as

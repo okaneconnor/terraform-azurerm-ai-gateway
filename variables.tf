@@ -14,15 +14,61 @@ variable "name_prefix" {
   }
 }
 
-variable "name_suffix" {
-  description = "Override the random 5-char suffix appended to most resource names. Set this for deterministic / standards-compliant names (some orgs forbid randomness in names). Leave null to generate one."
+variable "environment" {
+  description = <<-EOT
+    Optional environment token in resource names (e.g. "dev", "test", "prod"), per
+    the Azure CAF naming convention. Omitted from names when null: a single-instance
+    deployment gets `apim-aigw-uks`, a multi-environment estate `apim-aigw-prod-uks`.
+    See docs/naming.md.
+  EOT
   type        = string
   default     = null
 
   validation {
-    condition     = var.name_suffix == null || can(regex("^[a-z0-9]{1,8}$", var.name_suffix))
-    error_message = "name_suffix must be 1-8 lowercase alphanumeric chars."
+    condition     = var.environment == null || can(regex("^[a-z0-9]{1,10}$", var.environment))
+    error_message = "environment must be 1-10 lowercase alphanumeric chars (it feeds resource-name length limits)."
   }
+}
+
+variable "instance" {
+  description = <<-EOT
+    Optional instance token appended to resource names, for running more than one
+    deployment side by side in one subscription (e.g. "002"). Names are otherwise
+    fully deterministic — this module generates no random names, so the caller owns
+    uniqueness for globally-scoped names (APIM, Key Vault, the Foundry subdomain,
+    API Center, Managed Redis, the public-IP DNS label). See docs/naming.md.
+  EOT
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.instance == null || can(regex("^[a-z0-9]{1,4}$", var.instance))
+    error_message = "instance must be 1-4 lowercase alphanumeric chars (e.g. \"002\")."
+  }
+}
+
+variable "custom_names" {
+  description = <<-EOT
+    Per-resource name overrides for landing zones that mandate their own naming. Any
+    key left null is generated from the module's convention
+    (`<type>-<name_prefix>[-<environment>][-<region>][-<instance>]`).
+
+    Also the adoption path for an existing deployment: pin the names it already has
+    and it upgrades without renaming — and therefore without replacing — any
+    resource. See docs/upgrading-v2.md.
+  EOT
+  type = object({
+    resource_group = optional(string)
+    apim           = optional(string)
+    key_vault      = optional(string)
+    foundry        = optional(string)
+    log_analytics  = optional(string)
+    app_insights   = optional(string)
+    api_center     = optional(string)
+    redis          = optional(string)
+    vnet           = optional(string)
+  })
+  default = {}
 }
 
 variable "tags" {
@@ -32,7 +78,7 @@ variable "tags" {
 }
 
 variable "existing_resource_group_name" {
-  description = "Deploy into an existing resource group (landing-zone pattern) instead of creating one. The RG must already exist and be in var.location. Leave null to create one named <name_prefix>-<region>-rg."
+  description = "Deploy into an existing resource group (landing-zone pattern) instead of creating one. The RG must already exist and be in var.location. Leave null to create one named per the module's convention (`rg-<name_prefix>[-<environment>][-<region>][-<instance>]`, see docs/naming.md)."
   type        = string
   default     = null
 }

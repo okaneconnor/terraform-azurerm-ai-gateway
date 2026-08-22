@@ -8,7 +8,7 @@ locals {
 
 resource "azurerm_monitor_action_group" "main" {
   for_each            = local.create_action_group ? { this = {} } : {}
-  name                = "${var.name_prefix}-alerts-${local.suffix}"
+  name                = "ag-${local.name_base}"
   resource_group_name = local.resource_group_name
   short_name          = "aigwalerts"
   tags                = var.tags
@@ -24,7 +24,7 @@ resource "azurerm_monitor_action_group" "main" {
 
 resource "azurerm_monitor_metric_alert" "apim_capacity" {
   for_each            = var.alerts.enabled ? { this = {} } : {}
-  name                = "${var.name_prefix}-apim-capacity-${local.suffix}"
+  name                = "alert-apim-capacity-${local.name_base}"
   resource_group_name = local.resource_group_name
   scopes              = [azurerm_api_management.apim.id]
   description         = "APIM capacity above ${var.alerts.apim_capacity_threshold}%."
@@ -48,7 +48,7 @@ resource "azurerm_monitor_metric_alert" "apim_capacity" {
 
 resource "azurerm_monitor_metric_alert" "gateway_5xx" {
   for_each            = var.alerts.enabled ? { this = {} } : {}
-  name                = "${var.name_prefix}-gateway-5xx-${local.suffix}"
+  name                = "alert-gateway-5xx-${local.name_base}"
   resource_group_name = local.resource_group_name
   scopes              = [azurerm_api_management.apim.id]
   description         = "More than ${var.alerts.gateway_5xx_threshold} gateway 5xx responses in 5 minutes."
@@ -78,7 +78,7 @@ resource "azurerm_monitor_metric_alert" "gateway_5xx" {
 
 resource "azurerm_monitor_metric_alert" "model_tokens" {
   for_each            = var.alerts.enabled && var.alerts.model_tokens_per_min_threshold != null ? { this = {} } : {}
-  name                = "${var.name_prefix}-model-tokens-${local.suffix}"
+  name                = "alert-model-tokens-${local.name_base}"
   resource_group_name = local.resource_group_name
   scopes              = [azurerm_cognitive_account.foundry.id]
   description         = "Foundry token throughput above ${var.alerts.model_tokens_per_min_threshold}/min (approaching quota)."
@@ -102,7 +102,7 @@ resource "azurerm_monitor_metric_alert" "model_tokens" {
 
 resource "azurerm_monitor_scheduled_query_rules_alert_v2" "throttle_429" {
   for_each             = var.alerts.enabled ? { this = {} } : {}
-  name                 = "${var.name_prefix}-throttle-429-${local.suffix}"
+  name                 = "alert-throttle-429-${local.name_base}"
   resource_group_name  = local.resource_group_name
   location             = local.resource_group_location
   description          = "More than ${var.alerts.throttle_429_threshold} throttled (429) requests in 5 minutes."
@@ -131,7 +131,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "throttle_429" {
 
 resource "azurerm_monitor_scheduled_query_rules_alert_v2" "backend_failures" {
   for_each             = var.alerts.enabled ? { this = {} } : {}
-  name                 = "${var.name_prefix}-backend-failures-${local.suffix}"
+  name                 = "alert-backend-failures-${local.name_base}"
   resource_group_name  = local.resource_group_name
   location             = local.resource_group_location
   description          = "More than ${var.alerts.backend_failure_threshold} backend connection failures in 5 minutes."

@@ -22,7 +22,7 @@ resource "azurerm_managed_redis" "cache" {
 
 resource "azurerm_api_management_redis_cache" "cache" {
   for_each          = var.semantic_cache.enabled ? { this = {} } : {}
-  name              = "${var.name_prefix}-semantic-cache"
+  name              = "semantic-cache"
   api_management_id = azurerm_api_management.apim.id
   description       = "Semantic cache for LLM responses (RediSearch)."
   cache_location    = data.azurerm_location.current.display_name

@@ -6,6 +6,48 @@ All notable changes to this module are documented here. The format follows
 
 ## [Unreleased]
 
+### Breaking
+
+- **Every resource is renamed onto the Azure CAF naming convention** (#42), and the
+  random name suffix is gone. Names are now `<type>-<name_prefix>[-<environment>][-<region>][-<instance>]`
+  with the CAF resource-type abbreviation **first** (`apim-aigw-uks`, `rg-aigw-uks`,
+  `kv-aigw-uks`), so every name is predictable before apply — you can pre-create
+  policy, RBAC, DNS and firewall rules against it, and two applies of the same config
+  produce identical names.
+  - `var.name_suffix` is **removed**. It generated a random 5-char token when unset,
+    which made names unpredictable and forced a fresh suffix on every rebuild. Use the
+    new `var.instance` to disambiguate side-by-side deployments.
+  - New inputs: `var.environment` (optional CAF environment token), `var.instance`
+    (optional instance token), and `var.custom_names` (per-resource name overrides).
+  - Three abbreviations corrected against the [CAF table](https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ready/azure-best-practices/resource-abbreviations):
+    Foundry accounts `fdry` → **`aif`**, private endpoints `pe` → **`pep`**, Managed
+    Redis `redis` → **`amr`**.
+  - **The module no longer generates anything random, so the caller owns uniqueness**
+    for globally-scoped names (APIM, Key Vault, the Foundry subdomain, API Center,
+    Managed Redis, the public-IP DNS label) — the same contract CAF and Azure Verified
+    Modules assume. Use a distinctive `name_prefix`, or `instance`, or `custom_names`.
+  - Composed names are asserted against their Azure length cap at plan time (the
+    `name_lengths` check) rather than silently truncated, because a clipped name can
+    collide with another deployment's clipped name and surface as a confusing
+    "already exists" at apply. The failure message names the input to change.
+  - Renaming is a **replace**, not an in-place update. `docs/upgrading-v2.md` covers
+    the three paths, including adopting v2 **without renaming anything** by pinning
+    existing names in `custom_names`.
+
+### Added
+
+- `docs/naming.md` — the convention, the token table, every name a default deployment
+  produces, the scoped-child exceptions, the length caps, and the uniqueness contract.
+- `docs/upgrading-v2.md` — v1 → v2 migration, with the blast radius of each path
+  stated honestly.
+
+### Changed
+
+- **Static analysis moved from `tfsec` to `trivy`** (pre-commit + CI). Aqua Security
+  has retired tfsec in favour of Trivy, and tfsec's HCL parser predates Terraform 1.5
+  `check` blocks — it fails outright on the new `name_lengths` check rather than
+  reporting a finding. Trivy scans the module clean. Checkov is unchanged.
+
 ### Fixed
 
 - **Caller identity is no longer derived from `azp` alone** (#34). `caller-app-id` is the
