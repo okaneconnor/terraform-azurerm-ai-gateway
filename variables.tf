@@ -397,7 +397,7 @@ variable "ai_services" {
       sku_name     = "S0"
       display_name = "Document Intelligence"
       api_path     = "docintel"
-      short_name   = "doci"
+      short_name   = "di"
     }
   }
 }
