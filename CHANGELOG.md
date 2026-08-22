@@ -6,8 +6,26 @@ All notable changes to this module are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Caller identity is no longer derived from `azp` alone** (#34). `caller-app-id` is the
+  counter-key for the per-tier rate limit and token limit/quota, and the `vary-by` for the
+  semantic cache. It read only `azp` — a **v2.0** claim — and defaulted to an empty string,
+  so a v1.0 token (which carries `appid` instead) would have put that caller into a single
+  shared bucket: shared limits, and a shared cache partition that could serve one caller
+  another's completion, all while returning 200. The fragment now reads `azp` and falls
+  back to `appid`, and **fails closed with 403** if neither claim is present, so no caller
+  can occupy the empty key. Module-created gateway apps request v2 tokens (verified live —
+  even a managed identity fetching a token the v1/IMDS way receives a v2 token with `azp`),
+  so the exposure was mainly `existing_gateway_app` with a v1 manifest; the guard removes
+  the class of failure regardless of cause.
+
 ### Added
 
+- **Onboarding via managed identity** is documented and verified end to end in
+  `docs/onboarding.md` — a user-assigned identity granted a tier role authenticates with
+  no client secret and is limited under its own identity. Note the portal cannot assign
+  app-roles to managed identities; use the documented Graph/CLI path.
 - **Multi-member backend pool** (`var.backend_pool`, default single-member) — priority +
   weight load balancing across multiple Foundry endpoints with per-member circuit breakers,
   for the MS-recommended PTU-priority + PAYG-spillover pattern. Members are module-created

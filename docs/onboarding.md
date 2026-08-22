@@ -49,6 +49,26 @@ az rest --method post \
 Change `AI.Gateway.Sandbox` to the tier you are granting. A team can hold at most
 one tier — if you are moving a team, revoke the old assignment (step 4) first.
 
+### Onboarding a managed identity
+
+A managed identity is a service principal, so it is granted a tier exactly the same
+way — pass the identity's **principal id** as `TEAM_SP` in the Graph call above. This
+is the preferred shape for workloads running in Azure: the team holds no client secret
+at all, and there is nothing to rotate or leak.
+
+Two caveats:
+
+- The portal's **Users and groups** blade does not list managed identities. Use the
+  Graph/CLI path above (or Terraform) — the portal route is not available for MIs.
+- The workload must run in Azure with the identity attached (VM, Container App,
+  Function, Container Instance, AKS workload identity).
+
+The team then requests a token from the identity endpoint rather than with a secret —
+for example with `DefaultAzureCredential` / `ManagedIdentityCredential` and scope
+`<gateway_app_client_id>/.default`. Verified end to end: a user-assigned identity with
+a tier role assigned authenticated through the gateway and was rate-limited under its
+own identity, with no secret involved.
+
 ## 2. Hand off (non-secret)
 
 Give the team these values — **none of them are secrets**:

@@ -161,6 +161,33 @@ run "byo_gateway_app" {
   }
 }
 
+# caller-app-id is the counter-key for the rate limit and the token limit/quota, and
+# the vary-by for the semantic cache. It must resolve for every caller shape, and must
+# never resolve to "" — an empty key pools unrelated callers into one shared bucket.
+run "caller_app_id_reads_appid_and_fails_closed" {
+  command = plan
+
+  variables {
+    existing_gateway_app = { client_id = "11111111-1111-1111-1111-111111111111" }
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(azurerm_api_management_policy_fragment.entra_jwt.value, "GetValueOrDefault(&quot;azp&quot;"),
+      strcontains(azurerm_api_management_policy_fragment.entra_jwt.value, "GetValueOrDefault(&quot;appid&quot;"),
+    ])
+    error_message = "caller-app-id must read azp (v2 tokens) with an appid fallback (v1 tokens) so every caller keys to its own identity."
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(azurerm_api_management_policy_fragment.entra_jwt.value, "IsNullOrEmpty"),
+      strcontains(azurerm_api_management_policy_fragment.entra_jwt.value, "403"),
+    ])
+    error_message = "The fragment must fail closed with 403 when neither azp nor appid is present, so no caller can occupy the shared empty-key bucket."
+  }
+}
+
 run "cache_and_safety_disabled" {
   command = plan
 

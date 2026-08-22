@@ -17,6 +17,29 @@
     variable instead of re-parsing the Authorization header. Re-parsing the header
     is WRONG further down the pipeline anyway: ai-backend-managed-identity
     overwrites Authorization with APIM's MSI token (no azp claim).
+
+    azp is a v2.0 claim; v1.0 tokens carry appid instead. Both are read so a v1
+    caller (e.g. a managed identity fetching a token the IMDS ?resource= way, or a
+    bring-your-own gateway app whose manifest is v1) still keys to its own identity.
   -->
-  <set-variable name="caller-app-id" value="@(((Jwt)context.Variables[&quot;entra-jwt&quot;]).Claims.GetValueOrDefault(&quot;azp&quot;,&quot;&quot;))" />
+  <set-variable name="caller-app-id" value="@{
+      var jwt = (Jwt)context.Variables[&quot;entra-jwt&quot;];
+      var azp = jwt.Claims.GetValueOrDefault(&quot;azp&quot;, &quot;&quot;);
+      return !string.IsNullOrEmpty(azp) ? azp : jwt.Claims.GetValueOrDefault(&quot;appid&quot;, &quot;&quot;);
+  }" />
+  <!--
+    Fail closed. caller-app-id is the counter-key for the rate limit and the token
+    limit/quota, and the vary-by for the semantic cache. An empty value would put
+    every such caller in ONE shared bucket: they would share each other's limits and
+    could be served each other's cached completions, all while returning 200. A token
+    with neither claim is rejected rather than silently de-isolated.
+  -->
+  <choose>
+    <when condition="@(string.IsNullOrEmpty((string)context.Variables[&quot;caller-app-id&quot;]))">
+      <return-response>
+        <set-status code="403" reason="Forbidden" />
+        <set-body>Token carries no caller application id (azp or appid claim).</set-body>
+      </return-response>
+    </when>
+  </choose>
 </fragment>
