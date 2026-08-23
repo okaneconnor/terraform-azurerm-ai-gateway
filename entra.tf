@@ -43,8 +43,12 @@ data "azuread_service_principal" "gateway_byo" {
 
 locals {
   gateway_sp_object_id = var.existing_gateway_app != null ? data.azuread_service_principal.gateway_byo["this"].object_id : azuread_service_principal.gateway["this"].object_id
-  # app_role_ids is keyed by role value on both the resource and the data source.
-  gateway_admission_role_id = var.existing_gateway_app != null ? lookup(data.azuread_service_principal.gateway_byo["this"].app_role_ids, var.admission_app_role, null) : azuread_service_principal.gateway["this"].app_role_ids[var.admission_app_role]
+  # Created mode reads the role id the module itself minted (random_uuid), NOT the
+  # service principal's computed app_role_ids map: that map is only refreshed when
+  # the SP is read, so during an upgrade that changes the app's roles it still
+  # holds the previous set and an index into it fails at plan. BYO mode has no
+  # minted id, so it resolves through the SP data source (fresh every plan).
+  gateway_admission_role_id = var.existing_gateway_app != null ? lookup(data.azuread_service_principal.gateway_byo["this"].app_role_ids, var.admission_app_role, null) : random_uuid.role["this"].result
 }
 
 # In BYO mode the module cannot mint the role, so its absence must fail loudly at
@@ -80,8 +84,14 @@ resource "azuread_application_password" "demo" {
 }
 
 resource "azuread_app_role_assignment" "demo" {
-  for_each            = var.create_demo_clients ? var.tiers : {}
-  app_role_id         = azuread_service_principal.gateway["this"].app_role_ids[var.admission_app_role]
+  for_each = var.create_demo_clients ? var.tiers : {}
+  # The minted role id, for the same upgrade-staleness reason as
+  # local.gateway_admission_role_id above.
+  app_role_id         = random_uuid.role["this"].result
   principal_object_id = azuread_service_principal.demo[each.key].object_id
   resource_object_id  = azuread_service_principal.gateway["this"].object_id
+
+  # The role must exist on the gateway app before Graph will accept an
+  # assignment referencing it.
+  depends_on = [azuread_application.gateway]
 }
