@@ -1,0 +1,11 @@
+# The team registry: one reviewed file, one team per entry. See
+# modules/onboarding/README.md for the schema and validation rules.
+version: v1
+teams:
+  - team: team-alpha
+    owner: alpha-devs
+    tier: standard
+    services:
+      - service: chat
+        client_id: 00000000-0000-0000-0000-000000000000 # replace: the app/client id your service authenticates as
+        principal_object_id: 00000000-0000-0000-0000-000000000000 # replace: that identity's SP OBJECT id
