@@ -28,6 +28,35 @@ output "gateway_app_client_id" {
   value       = local.gateway_client_id
 }
 
+output "gateway_app_object_id" {
+  description = <<-EOT
+    Object id of the gateway's service principal — the resource_object_id an
+    external azuread_app_role_assignment binds to. Resolved in both modes
+    (module-created and existing_gateway_app), so team onboarding can live in its
+    own Terraform state and never plan the gateway.
+  EOT
+  value       = local.gateway_sp_object_id
+}
+
+output "gateway_app_role_id" {
+  description = <<-EOT
+    Id of the single admission app role (var.admission_app_role) — the app_role_id
+    for an external azuread_app_role_assignment. With gateway_app_object_id, this
+    is everything an out-of-state onboarding needs.
+  EOT
+  value       = local.gateway_admission_role_id
+}
+
+output "admission_app_role" {
+  description = "Value of the admission app role callers must carry (mirrors var.admission_app_role)."
+  value       = var.admission_app_role
+}
+
+output "tier_names" {
+  description = "Names of the configured tier presets — the values an onboarding registry may reference as a team's tier."
+  value       = keys(var.tiers)
+}
+
 output "demo_clients" {
   description = "Demo client credentials per tier (only when create_demo_clients = true). Map of tier key -> { client_id, client_secret }."
   value = {

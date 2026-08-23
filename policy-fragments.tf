@@ -21,7 +21,7 @@ resource "azurerm_api_management_policy_fragment" "entra_jwt" {
   value = templatefile("${path.module}/policies/frag-entra-jwt.xml", {
     tenant_id         = local.tenant_id
     gateway_client_id = local.gateway_client_id
-    app_roles         = local.tiers_sorted[*].app_role
+    admission_role    = var.admission_app_role
   })
 }
 
@@ -64,7 +64,7 @@ resource "azurerm_api_management_policy_fragment" "tier_rate" {
   name              = "ai-tier-rate"
   format            = "xml"
   value = templatefile("${path.module}/policies/frag-tier-rate.xml", {
-    tiers   = local.tiers_sorted
+    t       = local.default_tier_spec
     renewal = var.rate_limit_renewal_seconds
   })
 
@@ -76,7 +76,7 @@ resource "azurerm_api_management_policy_fragment" "tier_tokens" {
   name              = "ai-tier-tokens"
   format            = "xml"
   value = templatefile("${path.module}/policies/frag-tier-tokens.xml", {
-    tiers = local.tiers_sorted
+    t = local.default_tier_spec
   })
 
   depends_on = [azurerm_api_management_policy_fragment.entra_jwt]

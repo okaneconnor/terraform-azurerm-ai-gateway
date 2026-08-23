@@ -8,6 +8,40 @@ All notable changes to this module are documented here. The format follows
 
 ### Breaking
 
+- **Admission is now a single Entra app role; tiers are limit presets, not roles**
+  (#36). The gateway app defines ONE app role (`var.admission_app_role`, default
+  `AI.Gateway.Standard`) that answers exactly one question — is this identity
+  allowed to reach the gateway at all. `var.tiers` loses `app_role` and
+  `display_name` and becomes pure named limit presets; the new `var.default_tier`
+  selects which preset applies to admitted callers (may be omitted with a single
+  preset — the module never guesses between several). Why:
+  - **One source of truth for tier.** Per-tier roles plus per-team config would be
+    two competing authorities; with one admission role that conflict cannot exist,
+    and the old "client holds several roles → highest tier wins" tie-break
+    disappears with the ambiguity that forced it.
+  - **Onboarding stops being a directory schema change.** Adding a tier used to
+    mean a new app role on the gateway app (Graph-privileged); now it is config.
+    Admission (directory, rarely changes) and consumption limits (config, changes
+    often) get different owners, different privilege, different cadence.
+  - Migration: assign every existing caller the admission role; move per-tier
+    differentiation to the onboarding registry when it lands, or run distinct
+    gateways per tier in the interim. BYO gateway apps must define one role whose
+    value matches `admission_app_role` — its absence now fails the plan with a
+    named error (`check.byo_admission_role`) instead of surfacing downstream.
+
+### Added
+
+- **Consumer-integration outputs for out-of-state onboarding** (#36):
+  `gateway_app_object_id` and `gateway_app_role_id` — exactly the two values an
+  external `azuread_app_role_assignment` needs, resolved identically in
+  module-created and `existing_gateway_app` modes (BYO resolves through a service
+  principal data source). Plus `admission_app_role` and `tier_names` for
+  registry validation. Team onboarding can now live in its own tiny Terraform
+  state with Entra-only credentials — an onboarding apply can never plan the
+  gateway. `docs/onboarding.md` is rewritten around that path, and its Graph
+  examples now use the `appRoleAssignedTo` relationship of the resource service
+  principal (the form Microsoft Graph documents for app-role grants).
+
 - **Every resource is renamed onto the Azure CAF naming convention** (#42), and the
   random name suffix is gone. Names are now `<type>-<name_prefix>[-<environment>][-<region>][-<instance>]`
   with the CAF resource-type abbreviation **first** (`apim-aigw-uks`, `rg-aigw-uks`,

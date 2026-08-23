@@ -106,11 +106,11 @@ locals {
 
   gateway_client_id = var.existing_gateway_app != null ? var.existing_gateway_app.client_id : azuread_application.gateway["this"].client_id
 
-  tiers_sorted = [
-    for s in reverse(sort([
-      for k, t in var.tiers : format("%020d|%s", t.tokens_per_minute, k)
-    ])) : merge(var.tiers[split("|", s)[1]], { key = split("|", s)[1] })
-  ]
+  # The preset applied to every admitted caller: var.default_tier, or the single
+  # entry when only one preset is defined (the default_tier validation guarantees
+  # one of the two holds).
+  default_tier_key  = var.default_tier != null ? var.default_tier : keys(var.tiers)[0]
+  default_tier_spec = var.tiers[local.default_tier_key]
 
   content_safety_keys        = [for k, v in var.ai_services : k if v.kind == "ContentSafety"]
   content_safety_backend_key = length(local.content_safety_keys) > 0 ? local.content_safety_keys[0] : null
