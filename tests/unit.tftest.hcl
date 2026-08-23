@@ -70,8 +70,8 @@ run "defaults" {
   command = plan
 
   assert {
-    condition     = azurerm_resource_group.rg["this"].name == "aigw-uks-rg"
-    error_message = "RG name should derive the region shortcode from var.location."
+    condition     = azurerm_resource_group.rg["this"].name == "rg-aigw-uks"
+    error_message = "RG name must follow the CAF convention <type>-<prefix>-<region>."
   }
 
   assert {
@@ -566,20 +566,105 @@ run "internal_vnet_mode" {
   }
 }
 
-run "name_suffix_override" {
+# ── Naming convention (CAF): <type>-<name_prefix>[-<env>][-<region>][-<instance>] ──
+
+run "naming_minimal_omits_optional_tokens" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      azurerm_resource_group.rg["this"].name == "rg-aigw-uks",
+      azurerm_api_management.apim.name == "apim-aigw-uks",
+      azurerm_log_analytics_workspace.law["this"].name == "log-aigw-uks",
+      azurerm_application_insights.ai["this"].name == "appi-aigw-uks",
+      azurerm_key_vault.main["this"].name == "kv-aigw-uks",
+      azurerm_virtual_network.main["this"].name == "vnet-aigw-uks",
+    ])
+    error_message = "With environment and instance unset, names must be <type>-<prefix>-<region> with the optional tokens dropped entirely."
+  }
+}
+
+run "naming_full_token_order" {
   command = plan
 
   variables {
-    name_suffix = "prod01"
+    name_prefix = "contoso"
+    environment = "prod"
+    instance    = "002"
   }
 
   assert {
     condition = alltrue([
-      length(random_string.suffix) == 0,
-      azurerm_api_management.apim.name == "aigw-apim-prod01",
+      azurerm_resource_group.rg["this"].name == "rg-contoso-prod-uks-002",
+      azurerm_api_management.apim.name == "apim-contoso-prod-uks-002",
+      azurerm_cognitive_account.foundry.name == "aif-contoso-prod-uks-002",
+      azurerm_key_vault.main["this"].name == "kv-contoso-prod-uks-002",
     ])
-    error_message = "name_suffix must replace the random suffix deterministically."
+    error_message = "Token order must be <type>-<prefix>-<env>-<region>-<instance> for every resource, with the CAF type abbreviation first."
   }
+}
+
+# The instance token is how two deployments coexist in one subscription now that no
+# random component is generated. If it failed to reach the globally-scoped names,
+# the second deployment would collide at apply.
+run "naming_instance_disambiguates_global_names" {
+  command = plan
+
+  variables {
+    instance = "002"
+  }
+
+  assert {
+    condition = alltrue([
+      azurerm_api_management.apim.name == "apim-aigw-uks-002",
+      azurerm_key_vault.main["this"].name == "kv-aigw-uks-002",
+      azurerm_cognitive_account.foundry.name == "aif-aigw-uks-002",
+    ])
+    error_message = "The instance token must reach every globally-scoped name, or side-by-side deployments collide."
+  }
+}
+
+run "naming_custom_names_override" {
+  command = plan
+
+  variables {
+    custom_names = {
+      apim      = "legacy-apim-name"
+      key_vault = "legacy-kv"
+    }
+  }
+
+  assert {
+    condition = alltrue([
+      azurerm_api_management.apim.name == "legacy-apim-name",
+      azurerm_key_vault.main["this"].name == "legacy-kv",
+      # Untouched keys still follow the convention.
+      azurerm_log_analytics_workspace.law["this"].name == "log-aigw-uks",
+    ])
+    error_message = "custom_names must override per resource without affecting the rest — this is the v1 adoption path."
+  }
+}
+
+# Names are asserted against their Azure length cap rather than silently truncated:
+# a clipped name can collide with another deployment's clipped name, which surfaces
+# as a confusing "already exists" at apply.
+#
+# Key Vault is disabled here deliberately. Its name is still composed and still
+# length-checked, but with no vault resource to plan, the azurerm provider's own
+# schema validator does not run — so this proves the module's check fires on its own,
+# with a message naming the exact knob to turn. (When the vault IS enabled the
+# provider rejects the name first, with a far less actionable error.)
+run "naming_length_cap_fails_closed" {
+  command = plan
+
+  variables {
+    name_prefix = "contoso-ai-gate" # 15, the maximum
+    environment = "production"      # 10, the maximum
+    instance    = "0002"            # 4, the maximum
+    key_vault   = { enabled = false }
+  }
+
+  expect_failures = [check.name_lengths]
 }
 
 run "key_vault_disabled" {

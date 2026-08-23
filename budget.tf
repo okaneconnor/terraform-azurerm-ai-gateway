@@ -7,7 +7,7 @@ locals {
 
 resource "azurerm_consumption_budget_resource_group" "budget" {
   for_each          = var.budget.enabled ? { this = {} } : {}
-  name              = "${var.name_prefix}-budget-${local.suffix}"
+  name              = "budget-${local.name_base}"
   resource_group_id = local.resource_group_id
   amount            = var.budget.amount
   time_grain        = var.budget.time_grain

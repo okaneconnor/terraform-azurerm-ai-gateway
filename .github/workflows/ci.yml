@@ -50,13 +50,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: tfsec
-        uses: aquasecurity/tfsec-action@v1.0.3
+      # Trivy replaces tfsec, which Aqua Security has retired. tfsec's HCL parser
+      # also predates Terraform 1.5 `check` blocks and fails on the name_lengths check.
+      - name: trivy
+        uses: aquasecurity/trivy-action@0.28.0
         with:
-          working_directory: .
-          # Authenticate the release-binary download so it isn't anonymously
-          # rate-limited by the GitHub API (intermittent 403 on shared runners).
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          scan-type: config
+          scan-ref: .
+          exit-code: "1"
+          severity: HIGH,CRITICAL
       - name: checkov
         uses: bridgecrewio/checkov-action@v12
         with:

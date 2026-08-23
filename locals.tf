@@ -1,18 +1,8 @@
-resource "random_string" "suffix" {
-  for_each = var.name_suffix == null ? { this = {} } : {}
-  length   = 5
-  special  = false
-  upper    = false
-  numeric  = true
-}
-
 data "azurerm_location" "current" {
   location = var.location
 }
 
 locals {
-  suffix = var.name_suffix != null ? var.name_suffix : one(values(random_string.suffix)[*].result)
-
   region_short_map = {
     uksouth            = "uks"
     ukwest             = "ukw"
@@ -39,15 +29,58 @@ locals {
   }
   region_short = lookup(local.region_short_map, var.location, var.location)
 
-  rg_name   = "${var.name_prefix}-${local.region_short}-rg"
-  apim_name = "${var.name_prefix}-apim-${local.suffix}"
-  law_name  = "${var.name_prefix}-law-${local.suffix}"
-  ai_name   = "${var.name_prefix}-appi-${local.suffix}"
-  kv_name   = substr(replace("${var.name_prefix}kv${local.suffix}", "-", ""), 0, 24) # <=24 chars, alnum
+  # ── Naming ──────────────────────────────────────────────────────────────────
+  # Azure CAF convention, one fixed token order for every resource:
+  #
+  #     <type>-<name_prefix>[-<environment>][-<region>][-<instance>]
+  #
+  # `type` is the CAF resource abbreviation and always comes FIRST
+  # (learn.microsoft.com/azure/cloud-adoption-framework/ready/azure-best-practices/resource-abbreviations).
+  # Optional tokens drop out cleanly when null, so a minimal deployment reads
+  # `apim-aigw-uks` and a full one `apim-aigw-prod-uks-002`.
+  #
+  # This block is the ONLY place a resource name is constructed. Anything that needs
+  # a name takes it from here — a name built inline elsewhere is a bug, because it
+  # escapes both the convention and the length checks below.
+  #
+  # Names are fully deterministic: the module generates no random component, so the
+  # caller owns uniqueness for globally-scoped names. See docs/naming.md.
+  name_base = join("-", compact([
+    var.name_prefix,
+    var.environment,
+    local.region_short,
+    var.instance,
+  ]))
 
-  foundry_name = "${var.name_prefix}-fdry-${local.suffix}"
-  apic_name    = "${var.name_prefix}-apic-${local.suffix}"
-  redis_name   = "${var.name_prefix}-redis-${local.suffix}"
+  # Resources whose scope is a parent (subnets, NSG rules, PE connections, DNS links,
+  # diagnostic settings, APIM child resources) are named short and descriptively
+  # instead — they are already unique within that parent, so repeating the base is
+  # noise. Documented as a deliberate exception in docs/naming.md.
+  rg_name      = coalesce(var.custom_names.resource_group, "rg-${local.name_base}")
+  apim_name    = coalesce(var.custom_names.apim, "apim-${local.name_base}")
+  law_name     = coalesce(var.custom_names.log_analytics, "log-${local.name_base}")
+  ai_name      = coalesce(var.custom_names.app_insights, "appi-${local.name_base}")
+  foundry_name = coalesce(var.custom_names.foundry, "aif-${local.name_base}")
+  apic_name    = coalesce(var.custom_names.api_center, "apic-${local.name_base}")
+  redis_name   = coalesce(var.custom_names.redis, "amr-${local.name_base}")
+  vnet_name    = coalesce(var.custom_names.vnet, "vnet-${local.name_base}")
+
+  # Key Vault takes hyphens but caps at 24 chars, which the composed name can exceed
+  # once environment/instance are set. Truncating silently would risk two deployments
+  # colliding on the same clipped name, so the cap is asserted at plan time instead
+  # (see check "name_lengths" below) and the caller shortens name_prefix or sets
+  # custom_names.key_vault.
+  kv_name = coalesce(var.custom_names.key_vault, "kv-${local.name_base}")
+
+  # Every generated name that Azure length-caps, checked before anything is created.
+  name_length_caps = {
+    "key_vault (custom_names.key_vault)"   = { name = local.kv_name, max = 24 }
+    "apim (custom_names.apim)"             = { name = local.apim_name, max = 50 }
+    "foundry (custom_names.foundry)"       = { name = local.foundry_name, max = 64 }
+    "redis (custom_names.redis)"           = { name = local.redis_name, max = 60 }
+    "api_center (custom_names.api_center)" = { name = local.apic_name, max = 90 }
+    "resource_group"                       = { name = local.rg_name, max = 90 }
+  }
 
   tenant_id = data.azurerm_client_config.current.tenant_id
 
@@ -115,7 +148,25 @@ locals {
     : "${trimsuffix(m.endpoint_url, "/")}/openai"
   }
 
+  # Pool members are siblings of the platform Foundry account, so the member key is
+  # the discriminator: aif-<member>-<base>.
   member_account_name = { for k, m in local.created_members : k =>
-    substr(lower("${var.name_prefix}-fdry-${k}-${local.suffix}"), 0, 63)
+    substr(lower("aif-${k}-${local.name_base}"), 0, 63)
+  }
+}
+
+# Length caps are asserted rather than silently truncated: a clipped name can collide
+# with another deployment's clipped name, which surfaces as a confusing "already
+# exists" at apply instead of a clear message here.
+check "name_lengths" {
+  assert {
+    condition = alltrue([
+      for _, v in local.name_length_caps : length(v.name) <= v.max
+    ])
+    error_message = "Generated resource names exceed their Azure length limit: ${join("; ", [
+      for k, v in local.name_length_caps :
+      "${k} is ${length(v.name)} chars (max ${v.max}): \"${v.name}\""
+      if length(v.name) > v.max
+    ])}. Shorten name_prefix/environment/instance, or set the matching custom_names entry."
   }
 }

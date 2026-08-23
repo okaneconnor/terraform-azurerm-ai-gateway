@@ -1,5 +1,5 @@
 # Pre-commit hooks for this module. Install once:
-#   brew install pre-commit terraform-docs tfsec checkov
+#   brew install pre-commit terraform-docs trivy checkov
 #   pre-commit install
 # Run on demand against everything:
 #   pre-commit run -a
@@ -14,7 +14,10 @@ repos:
       - id: terraform_docs
         args:
           - --args=--config=.terraform-docs.yml
-      - id: terraform_tfsec
+      # Trivy replaces tfsec, which Aqua Security has retired ("attention will be
+      # directed at Trivy going forward"). tfsec's HCL parser also predates
+      # Terraform 1.5 `check` blocks and fails outright on the name_lengths check.
+      - id: terraform_trivy
       - id: terraform_checkov
         args:
           - --args=--framework terraform

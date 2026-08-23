@@ -4,8 +4,8 @@ resource "random_uuid" "role" {
 
 resource "azuread_application" "gateway" {
   for_each         = var.existing_gateway_app == null ? { this = {} } : {}
-  display_name     = "${var.name_prefix}-gateway-${local.suffix}"
-  identifier_uris  = ["api://${var.name_prefix}-gateway-${local.suffix}"]
+  display_name     = "${local.name_base}-gateway"
+  identifier_uris  = ["api://${local.name_base}-gateway"]
   sign_in_audience = "AzureADMyOrg"
   owners           = [data.azuread_client_config.current.object_id]
 
@@ -34,7 +34,7 @@ resource "azuread_service_principal" "gateway" {
 
 resource "azuread_application" "demo" {
   for_each         = var.create_demo_clients ? var.tiers : {}
-  display_name     = "${var.name_prefix}-client-${each.key}-${local.suffix}"
+  display_name     = "${local.name_base}-client-${each.key}"
   sign_in_audience = "AzureADMyOrg"
   owners           = [data.azuread_client_config.current.object_id]
 }

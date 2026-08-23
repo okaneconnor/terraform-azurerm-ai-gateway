@@ -1,6 +1,6 @@
 resource "azurerm_virtual_network" "main" {
   for_each            = local.create_network ? { this = {} } : {}
-  name                = "${var.name_prefix}-vnet-${local.suffix}"
+  name                = local.vnet_name
   location            = local.resource_group_location
   resource_group_name = local.resource_group_name
   address_space       = [var.network.vnet_cidr]
@@ -27,7 +27,7 @@ resource "azurerm_subnet" "pe" {
 
 resource "azurerm_network_security_group" "apim" {
   for_each            = local.create_network ? { this = {} } : {}
-  name                = "nsg-apim-${local.suffix}"
+  name                = "nsg-apim-${local.name_base}"
   location            = local.resource_group_location
   resource_group_name = local.resource_group_name
   tags                = var.tags

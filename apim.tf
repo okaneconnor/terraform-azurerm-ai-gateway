@@ -1,13 +1,13 @@
 resource "azurerm_public_ip" "apim" {
   #checkov:skip=CKV_AZURE_116:This IP fronts APIM's External-mode gateway (gated by mandatory Entra JWT + IP filter); zonal APIM requires a customer-assigned Standard IP here.
   for_each            = var.apim_zones != null && var.apim_virtual_network_type == "External" ? { this = {} } : {}
-  name                = "pip-apim-${local.suffix}"
+  name                = "pip-apim-${local.name_base}"
   location            = local.resource_group_location
   resource_group_name = local.resource_group_name
   allocation_method   = "Static"
   sku                 = "Standard"
   zones               = var.apim_zones
-  domain_name_label   = "${var.name_prefix}-apim-${local.suffix}"
+  domain_name_label   = local.apim_name
   tags                = var.tags
 }
 

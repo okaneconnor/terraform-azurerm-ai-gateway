@@ -40,7 +40,7 @@ locals {
 
 resource "azurerm_private_endpoint" "pe" {
   for_each            = local.private_endpoints
-  name                = "pe-${each.key}-${local.suffix}"
+  name                = "pep-${each.key}-${local.name_base}"
   location            = local.resource_group_location
   resource_group_name = local.resource_group_name
   subnet_id           = local.pe_subnet_id
