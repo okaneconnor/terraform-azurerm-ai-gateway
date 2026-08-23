@@ -1,73 +1,91 @@
 # Onboarding a team
 
 A platform runbook for granting, handing off, verifying, and revoking a team's
-access to the AI gateway. Access is a **single Entra app-role assignment** — no
-secrets are distributed by the platform, and access is instantly revocable.
+access to the AI gateway. Access is a **single Entra app-role assignment** of the
+gateway's admission role — no secrets are distributed by the platform, and access
+is instantly revocable.
 
-The commands below were verified live. Run them from a checkout that has the
-deployment's Terraform state (or replace the `terraform output` calls with the
-literal values you handed off).
+Admission and configuration are deliberately separate concerns:
+
+- **Admission** (this runbook) — the identity holds the gateway's admission role
+  (`admission_app_role`, default `AI.Gateway.Standard`). A directory operation,
+  needed once per identity.
+- **Consumption config** — limits and quotas come from the gateway's tier presets
+  (`var.tiers` / `var.default_tier`), not from the role. Admitted callers get the
+  default preset; per-team tiers and overrides are managed as gateway
+  configuration, so granting access never means editing limits, and vice versa.
 
 ## Prerequisites
 
-- The team has an Entra **app registration** and can give you its `client_id`
-  (the application/client ID of the app they will use to request tokens).
-- You are an **admin** with rights to assign app-roles on the gateway app
-  (Application Administrator / Cloud Application Administrator, or an owner of the
-  gateway app registration).
-- The gateway is deployed and you can read its outputs:
-  `gateway_app_client_id`, `apim_gateway_url`, `tenant_id`.
+- The team has a **workload identity** — an Entra app registration or a managed
+  identity (a managed identity is a service principal; everything below applies
+  identically).
+- Someone with rights to assign app-roles on the gateway app (Application
+  Administrator / Cloud Application Administrator, or an owner of the gateway app
+  registration) — **or**, for the Terraform path, a principal allowed to create
+  app-role assignments.
+- The gateway is deployed and its outputs are readable: `gateway_app_client_id`,
+  `gateway_app_object_id`, `gateway_app_role_id`, `apim_gateway_url`, `tenant_id`.
 
-## 1. Grant a tier (assign an app-role)
+## 1. Admit the team (assign the admission role)
 
-Each tier is an app-role on the gateway app — e.g. `AI.Gateway.Sandbox`,
-`AI.Gateway.Standard`, `AI.Gateway.Premium`. Assigning the role to the team's
-service principal is what lets their tokens carry the tier in the `roles` claim.
+### Terraform (recommended)
+
+Onboarding lives in its **own Terraform state**, wired to the gateway purely by
+outputs — an onboarding apply touches one `azuread_app_role_assignment` and can
+never plan the gateway itself. The applying principal needs Entra permissions
+only, not gateway credentials.
+
+```hcl
+# A tiny, separate configuration — not part of the gateway state.
+data "terraform_remote_state" "gateway" {
+  backend = "azurerm" # wherever the gateway's state lives
+  config  = { /* ... */ }
+}
+
+resource "azuread_app_role_assignment" "team_chat_service" {
+  app_role_id         = data.terraform_remote_state.gateway.outputs.gateway_app_role_id
+  principal_object_id = "<team service principal OBJECT id>"
+  resource_object_id  = data.terraform_remote_state.gateway.outputs.gateway_app_object_id
+}
+```
+
+For a service principal or managed identity, `principal_object_id` is the
+**object id** (not the application/client id):
+
+```bash
+az ad sp show --id <app-id-or-object-id> --query id -o tsv   # app registration
+az identity show -g <rg> -n <mi-name> --query principalId -o tsv  # managed identity
+```
+
+Removing the resource (or `terraform destroy` on the onboarding state) revokes
+access. `terraform plan` against the gateway state shows **zero changes** either
+way — that separation is the point.
 
 ### Portal
 
-1. **Entra ID → Enterprise applications →** the gateway app (search by the
+1. **Entra ID → Enterprise applications →** the gateway app (search by
    `gateway_app_client_id`).
 2. **Users and groups → Add user/group.**
-3. Select the team's service principal, pick the tier role (e.g.
-   `AI.Gateway.Sandbox`), and **Assign**.
+3. Select the team's service principal and **Assign** (the only role is the
+   admission role). Note: the portal blade cannot assign roles to **managed
+   identities** — use the Terraform or Graph path for those.
 
 ### az / Microsoft Graph
 
+Assignments are created on the **resource** service principal's
+`appRoleAssignedTo` relationship (the form Microsoft Graph documents for granting
+an app role to a client service principal):
+
 ```bash
-# Object IDs of the two service principals, and the role ID to grant.
 TEAM_SP=$(az ad sp show --id <team-app-id> --query id -o tsv)
-GW_SP=$(az ad sp show --id $(terraform output -raw gateway_app_client_id) --query id -o tsv)
-ROLE=$(az ad sp show --id $(terraform output -raw gateway_app_client_id) \
-  --query "appRoles[?value=='AI.Gateway.Sandbox'].id | [0]" -o tsv)
+GW_SP=$(terraform output -raw gateway_app_object_id)
+ROLE=$(terraform output -raw gateway_app_role_id)
 
 az rest --method post \
-  --url "https://graph.microsoft.com/v1.0/servicePrincipals/$TEAM_SP/appRoleAssignments" \
+  --url "https://graph.microsoft.com/v1.0/servicePrincipals/$GW_SP/appRoleAssignedTo" \
   --body "{\"principalId\":\"$TEAM_SP\",\"resourceId\":\"$GW_SP\",\"appRoleId\":\"$ROLE\"}"
 ```
-
-Change `AI.Gateway.Sandbox` to the tier you are granting. A team can hold at most
-one tier — if you are moving a team, revoke the old assignment (step 4) first.
-
-### Onboarding a managed identity
-
-A managed identity is a service principal, so it is granted a tier exactly the same
-way — pass the identity's **principal id** as `TEAM_SP` in the Graph call above. This
-is the preferred shape for workloads running in Azure: the team holds no client secret
-at all, and there is nothing to rotate or leak.
-
-Two caveats:
-
-- The portal's **Users and groups** blade does not list managed identities. Use the
-  Graph/CLI path above (or Terraform) — the portal route is not available for MIs.
-- The workload must run in Azure with the identity attached (VM, Container App,
-  Function, Container Instance, AKS workload identity).
-
-The team then requests a token from the identity endpoint rather than with a secret —
-for example with `DefaultAzureCredential` / `ManagedIdentityCredential` and scope
-`<gateway_app_client_id>/.default`. Verified end to end: a user-assigned identity with
-a tier role assigned authenticated through the gateway and was rate-limited under its
-own identity, with no secret involved.
 
 ## 2. Hand off (non-secret)
 
@@ -78,18 +96,17 @@ Give the team these values — **none of them are secrets**:
 | `gateway_app_client_id` | `terraform output -raw gateway_app_client_id` | Token audience/scope (`<gateway_app_client_id>/.default`) |
 | `apim_gateway_url` | `terraform output -raw apim_gateway_url` | Base URL for API calls |
 | `tenant_id` | `terraform output -raw tenant_id` | Token endpoint tenant |
-| Tier granted | the role you assigned in step 1 | Their rate/token limits and cache partition |
 
-The team keeps their **own** app credentials — the platform never sees or
-distributes them.
+The team keeps their **own** credentials — the platform never sees or distributes
+them. A managed-identity workload holds no secret at all.
 
 ## 3. Team calls the gateway
 
-The team requests a **client-credentials** token with their own app credentials
-and the gateway app as the scope, then calls the gateway with a bearer token.
+The team requests a token for the gateway's scope and calls with a bearer token.
 
 ```bash
-# Client-credentials token (the team runs this with THEIR client_id/secret).
+# Client-credentials token (the team runs this with THEIR client_id/secret; a
+# managed identity uses DefaultAzureCredential/ManagedIdentityCredential instead).
 TOKEN=$(curl -s -X POST \
   "https://login.microsoftonline.com/<tenant_id>/oauth2/v2.0/token" \
   -d "grant_type=client_credentials" \
@@ -109,13 +126,12 @@ curl -s -X POST \
 Notes:
 
 - **GPT-5 models reject `max_tokens`** — use `max_completion_tokens` or omit it.
-  Older models still accept `max_tokens`.
-- The `roles` claim in the token drives the tier; the `azp` claim keys the rate
+- The `roles` claim proves admission; the `azp` claim keys the rate limits, token
   limits and cache partition — a client never sees another client's cached
   completion.
 - **Internal-mode gateways have no public endpoint.** In `Internal` network mode
-  the request must originate from inside the VNet (or a peered network / private
-  DNS resolver). See [usage.md → Internal VNet mode](usage.md).
+  the request must originate from inside the VNet. See
+  [usage.md → Internal VNet mode](usage.md).
 
 ## 4. Verify
 
@@ -127,35 +143,42 @@ BODY='{"messages":[{"role":"user","content":"hello"}],"max_completion_tokens":10
 curl -s -o /dev/null -w "no-token  %{http_code}\n" -X POST "$CHAT" \
   -H "Content-Type: application/json" -d "$BODY"
 
-# Onboarded -> 200
-curl -s -o /dev/null -w "onboarded %{http_code}\n" -X POST "$CHAT" \
+# Admitted -> 200
+curl -s -o /dev/null -w "admitted  %{http_code}\n" -X POST "$CHAT" \
   -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d "$BODY"
 ```
 
-Expected: no-token `401`, onboarded `200`.
+Expected: no-token `401`, admitted `200`.
 
 ## 5. Revoke (de-provision)
 
-Deleting the app-role assignment cuts the team off immediately — no secret
-rotation, no redeploy.
+Terraform path: remove the `azuread_app_role_assignment` (or destroy the
+onboarding state) and apply.
+
+Graph path — find and delete the assignment on the **resource** SP:
 
 ```bash
-# Find the assignment for this team on the gateway app, then delete it.
 AID=$(az rest --method get \
-  --url "https://graph.microsoft.com/v1.0/servicePrincipals/$TEAM_SP/appRoleAssignments" \
-  --query "value[?resourceId=='$GW_SP'].id | [0]" -o tsv)
+  --url "https://graph.microsoft.com/v1.0/servicePrincipals/$GW_SP/appRoleAssignedTo" \
+  --query "value[?principalId=='$TEAM_SP'].id | [0]" -o tsv)
 
 az rest --method delete \
-  --url "https://graph.microsoft.com/v1.0/servicePrincipals/$TEAM_SP/appRoleAssignments/$AID"
+  --url "https://graph.microsoft.com/v1.0/servicePrincipals/$GW_SP/appRoleAssignedTo/$AID"
 ```
 
-Re-run the **Verify** step: the onboarded call should now return `401`/`403`.
+Already-issued tokens remain valid until they expire (up to ~60–90 minutes);
+**newly requested tokens** no longer carry the role and are rejected. Re-run the
+**Verify** step with a fresh token: expect `401`/`403`.
 
 ## Why keyless
 
-- **No secrets distributed by the platform** — the team uses its own app
-  credentials; the platform holds nothing to leak or rotate.
-- **Access = one app-role assignment** — grant and revoke are a single Graph call
-  (or one portal action), and revocation is instant.
+- **No secrets distributed by the platform** — the team uses its own credentials
+  (or none, with a managed identity); the platform holds nothing to leak or
+  rotate.
+- **Access = one app-role assignment** — grant and revoke are one Graph call, one
+  portal action, or one tiny Terraform resource; revocation applies from the next
+  token.
+- **Onboarding never touches the gateway** — the assignment lives outside the
+  gateway state, keyed by two stable outputs.
 - **Chargeback** — usage is attributed per team via the App ID (`azp`) dimension
   on the token metric, so cost/quota reporting needs no shared keys.

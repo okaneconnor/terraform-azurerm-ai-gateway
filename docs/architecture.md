@@ -22,12 +22,11 @@ Client app (Entra client-credentials)
 │    → ai-token-metrics                       │
 │  outbound: llm-semantic-cache-store         │
 │                                             │
-│  Tiering (rendered from var.tiers,          │
-│  keyed by the caller's azp claim):          │
-│    role AI.Gateway.Production               │
-│      → 150k TPM / 120 req/min               │
-│    role AI.Gateway.Sandbox                  │
-│      → 20k TPM / 30 req/min                 │
+│  Admission + limits (keyed by the           │
+│  caller's azp claim):                       │
+│    role AI.Gateway.Standard → admitted      │
+│    limits ← default tier preset             │
+│      (var.tiers / var.default_tier)         │
 │                                             │
 │  APIs:                                      │
 │    /openai        → AI Foundry (your models)│

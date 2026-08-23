@@ -33,6 +33,12 @@ mock_provider "azurerm" {
 }
 
 mock_provider "azuread" {
+  mock_data "azuread_service_principal" {
+    defaults = {
+      object_id    = "00000000-0000-0000-0000-000000000010"
+      app_role_ids = { "AI.Gateway.Standard" = "00000000-0000-0000-0000-000000000011" }
+    }
+  }
   mock_data "azuread_client_config" {
     defaults = {
       tenant_id = "00000000-0000-0000-0000-000000000002"
@@ -84,11 +90,15 @@ run "defaults" {
     error_message = "All AI service accounts must be Entra-only (no API keys)."
   }
 
-  # Tier branches render highest tokens_per_minute first (multi-role clients get
-  # their best tier) and key counters off the validated caller identity.
+  # The admission role carries no tier: the rate fragment renders the default
+  # preset's numbers unconditionally (per-team differentiation is the onboarding
+  # registry's job), keyed per caller.
   assert {
-    condition     = strcontains(split("</when>", azurerm_api_management_policy_fragment.tier_rate.value)[0], "AI.Gateway.Production")
-    error_message = "First tier branch must be the highest tier (production outranks sandbox)."
+    condition = alltrue([
+      strcontains(azurerm_api_management_policy_fragment.tier_rate.value, "calls=\"30\""),
+      !strcontains(azurerm_api_management_policy_fragment.tier_rate.value, "<choose>"),
+    ])
+    error_message = "Rate fragment must render the default preset's limit with no role branching."
   }
 
   assert {
@@ -149,16 +159,39 @@ run "byo_gateway_app" {
   }
 
   # With a known client_id the JWT fragment is fully known at plan: assert the
-  # audience, every tier role, and the caller-app-id set-variable.
+  # audience, the single admission role, and the caller-app-id set-variable.
   assert {
     condition = alltrue([
       strcontains(azurerm_api_management_policy_fragment.entra_jwt.value, "11111111-1111-1111-1111-111111111111"),
-      strcontains(azurerm_api_management_policy_fragment.entra_jwt.value, "AI.Gateway.Sandbox"),
-      strcontains(azurerm_api_management_policy_fragment.entra_jwt.value, "AI.Gateway.Production"),
+      strcontains(azurerm_api_management_policy_fragment.entra_jwt.value, "AI.Gateway.Standard"),
       strcontains(azurerm_api_management_policy_fragment.entra_jwt.value, "caller-app-id"),
     ])
-    error_message = "JWT fragment must pin the BYO audience, list every tier role, and set caller-app-id."
+    error_message = "JWT fragment must pin the BYO audience, require the admission role, and set caller-app-id."
   }
+
+  # The onboarding outputs resolve through the data source in BYO mode — the
+  # values an external azuread_app_role_assignment consumes.
+  assert {
+    condition = alltrue([
+      output.gateway_app_object_id == "00000000-0000-0000-0000-000000000010",
+      output.gateway_app_role_id == "00000000-0000-0000-0000-000000000011",
+      output.admission_app_role == "AI.Gateway.Standard",
+    ])
+    error_message = "gateway_app_object_id / gateway_app_role_id must resolve via the BYO service-principal data source."
+  }
+}
+
+# A BYO app that never defined the admission role must fail the plan loudly, not
+# emit a null role id that breaks the consumer's onboarding state later.
+run "byo_missing_admission_role_fails" {
+  command = plan
+
+  variables {
+    existing_gateway_app = { client_id = "11111111-1111-1111-1111-111111111111" }
+    admission_app_role   = "AI.Gateway.Other"
+  }
+
+  expect_failures = [check.byo_admission_role]
 }
 
 # caller-app-id is the counter-key for the rate limit and the token limit/quota, and
@@ -222,43 +255,31 @@ run "extra_tier_and_demo_clients" {
 
   variables {
     create_demo_clients = true
+    default_tier        = "ai-premium"
     tiers = {
-      "ai-sandbox" = {
-        display_name      = "AI Sandbox"
-        app_role          = "AI.Gateway.Sandbox"
-        tokens_per_minute = 20000
-        rate_limit_calls  = 30
-      }
-      "ai-production-standard" = {
-        display_name      = "AI Production Standard"
-        app_role          = "AI.Gateway.Production"
-        tokens_per_minute = 150000
-        rate_limit_calls  = 120
-      }
-      "ai-premium" = {
-        display_name      = "AI Premium"
-        app_role          = "AI.Gateway.Premium"
-        tokens_per_minute = 500000
-        rate_limit_calls  = 300
-      }
+      "ai-sandbox"             = { tokens_per_minute = 20000, rate_limit_calls = 30 }
+      "ai-production-standard" = { tokens_per_minute = 150000, rate_limit_calls = 120 }
+      "ai-premium"             = { tokens_per_minute = 500000, rate_limit_calls = 300 }
     }
   }
 
-  # Adding a tier is the COMPLETE change: branch rendered (highest first), limit
-  # applied, demo client created.
+  # default_tier selects which preset renders into the limit fragments.
   assert {
-    condition     = strcontains(split("</when>", azurerm_api_management_policy_fragment.tier_tokens.value)[0], "500000")
-    error_message = "Premium (highest tpm) must be the first token-limit branch."
-  }
-
-  assert {
-    condition     = strcontains(azurerm_api_management_policy_fragment.tier_rate.value, "AI.Gateway.Premium")
-    error_message = "New tier's role must appear in the rate-limit branches."
+    condition = alltrue([
+      strcontains(azurerm_api_management_policy_fragment.tier_tokens.value, "tokens-per-minute=\"500000\""),
+      strcontains(azurerm_api_management_policy_fragment.tier_rate.value, "calls=\"300\""),
+    ])
+    error_message = "The default_tier preset's numbers must render into both limit fragments."
   }
 
   assert {
     condition     = length(azuread_application.demo) == 3
-    error_message = "One demo client per tier."
+    error_message = "One demo client per tier preset."
+  }
+
+  assert {
+    condition     = length(output.tier_names) == 3
+    error_message = "tier_names must list every preset for the onboarding registry to reference."
   }
 }
 
@@ -271,25 +292,11 @@ run "full_stack_shape" {
   variables {
     create_demo_clients = true
     semantic_cache      = { enabled = true }
+    default_tier        = "ai-production-standard"
     tiers = {
-      "ai-sandbox" = {
-        display_name      = "AI Sandbox"
-        app_role          = "AI.Gateway.Sandbox"
-        tokens_per_minute = 20000
-        rate_limit_calls  = 30
-      }
-      "ai-production-standard" = {
-        display_name      = "AI Production Standard"
-        app_role          = "AI.Gateway.Production"
-        tokens_per_minute = 150000
-        rate_limit_calls  = 120
-      }
-      "ai-premium" = {
-        display_name      = "AI Premium"
-        app_role          = "AI.Gateway.Premium"
-        tokens_per_minute = 500000
-        rate_limit_calls  = 300
-      }
+      "ai-sandbox"             = { tokens_per_minute = 20000, rate_limit_calls = 30 }
+      "ai-production-standard" = { tokens_per_minute = 150000, rate_limit_calls = 120 }
+      "ai-premium"             = { tokens_per_minute = 500000, rate_limit_calls = 300 }
     }
   }
 
@@ -334,7 +341,8 @@ run "full_stack_shape" {
     error_message = "Every optional component must be present in the full stack."
   }
 
-  # Per-tier objects: 3 demo clients, secrets, and role assignments.
+  # Per-preset demo objects: 3 demo clients, secrets, and role assignments —
+  # every one admitted by the same single role.
   assert {
     condition = alltrue([
       length(azuread_application.demo) == 3,
@@ -363,17 +371,31 @@ run "semantic_cache_default_off" {
   }
 }
 
-run "rejects_substring_roles" {
+# With several presets the module never guesses a caller's limits.
+run "rejects_multiple_tiers_without_default" {
   command = plan
 
   variables {
     tiers = {
-      a = { display_name = "A", app_role = "AI.Premium", tokens_per_minute = 1000, rate_limit_calls = 10 }
-      b = { display_name = "B", app_role = "AI.Premium2", tokens_per_minute = 2000, rate_limit_calls = 20 }
+      a = { tokens_per_minute = 1000, rate_limit_calls = 10 }
+      b = { tokens_per_minute = 2000, rate_limit_calls = 20 }
     }
   }
 
-  expect_failures = [var.tiers]
+  expect_failures = [var.default_tier]
+}
+
+run "rejects_default_tier_not_in_tiers" {
+  command = plan
+
+  variables {
+    default_tier = "missing"
+    tiers = {
+      a = { tokens_per_minute = 1000, rate_limit_calls = 10 }
+    }
+  }
+
+  expect_failures = [var.default_tier]
 }
 
 run "rejects_vnet_incompatible_apim_sku" {
@@ -696,16 +718,14 @@ run "key_vault_premium_sku" {
   }
 }
 
-run "rejects_bad_app_role_charset" {
+run "rejects_bad_admission_role_charset" {
   command = plan
 
   variables {
-    tiers = {
-      a = { display_name = "A", app_role = "AI Gateway Sandbox", tokens_per_minute = 1000, rate_limit_calls = 10 }
-    }
+    admission_app_role = "AI Gateway Standard"
   }
 
-  expect_failures = [var.tiers]
+  expect_failures = [var.admission_app_role]
 }
 
 run "rejects_invalid_internal_mode" {
@@ -748,8 +768,6 @@ run "tier_token_quota_rendered" {
   variables {
     tiers = {
       "ai-sandbox" = {
-        display_name       = "AI Sandbox"
-        app_role           = "AI.Gateway.Sandbox"
         tokens_per_minute  = 20000
         rate_limit_calls   = 30
         token_quota        = 500000
@@ -784,7 +802,7 @@ run "rejects_invalid_token_quota_period" {
 
   variables {
     tiers = {
-      a = { display_name = "A", app_role = "AI.Gateway.Sandbox", tokens_per_minute = 1000, rate_limit_calls = 10, token_quota = 1000, token_quota_period = "Minutely" }
+      a = { tokens_per_minute = 1000, rate_limit_calls = 10, token_quota = 1000, token_quota_period = "Minutely" }
     }
   }
 

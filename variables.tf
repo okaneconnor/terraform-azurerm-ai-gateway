@@ -287,35 +287,47 @@ variable "model_deployments" {
   }
 }
 
+variable "admission_app_role" {
+  description = <<-EOT
+    Value of the single Entra app role that admits a caller to the gateway. The
+    role answers exactly one question — is this identity an approved workload
+    permitted to reach the gateway at all — and carries no tier, limits or model
+    rights: those come from the tier presets (var.tiers / var.default_tier) and,
+    for per-team differentiation, the onboarding registry. Admission is therefore
+    a directory concern (rarely changes, directory-privileged) while consumption
+    config is a repo concern (changes often, PR-reviewed).
+  EOT
+  type        = string
+  default     = "AI.Gateway.Standard"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._-]+$", var.admission_app_role))
+    error_message = "admission_app_role must match ^[A-Za-z0-9._-]+$ (Entra app-role value charset; no spaces or XML metacharacters)."
+  }
+}
+
 variable "tiers" {
   description = <<-EOT
-    Self-service consumption tiers (keyless model: limits keyed by the caller's
-    Entra client app id). Each tier becomes an Entra app role on the gateway app
-    AND a branch in the rate/token-limit policies, so adding an entry here is the
-    complete change. Tokens-per-minute also bounds spend per client.
-    The JWT policy admits only tokens carrying one of these app roles; when a
-    client holds several, the highest tokens_per_minute tier wins.
+    Named consumption presets (keyless model: limits keyed by the caller's Entra
+    client app id). A tier is a bundle of rate/token limits — it is NOT an Entra
+    app role: every caller is admitted by the single admission_app_role, and
+    var.default_tier selects which preset applies. Per-team tier selection and
+    overrides arrive with the onboarding registry, which references these preset
+    names.
   EOT
   type = map(object({
-    display_name       = string
-    app_role           = string
     tokens_per_minute  = number
     rate_limit_calls   = number
     token_quota        = optional(number)
     token_quota_period = optional(string, "Monthly")
   }))
+  # One conservative preset out of the box: with a single preset, default_tier may
+  # be omitted and every admitted caller gets these limits. Estates define more
+  # presets and select per team via the onboarding registry.
   default = {
-    "ai-sandbox" = {
-      display_name      = "AI Sandbox"
-      app_role          = "AI.Gateway.Sandbox"
+    "standard" = {
       tokens_per_minute = 20000
       rate_limit_calls  = 30
-    }
-    "ai-production-standard" = {
-      display_name      = "AI Production Standard"
-      app_role          = "AI.Gateway.Production"
-      tokens_per_minute = 150000
-      rate_limit_calls  = 120
     }
   }
 
@@ -324,28 +336,28 @@ variable "tiers" {
     error_message = "Define at least one tier."
   }
   validation {
-    condition     = length(distinct([for t in var.tiers : t.app_role])) == length(var.tiers)
-    error_message = "Each tier needs a unique app_role value."
-  }
-  validation {
-    condition     = alltrue([for t in var.tiers : can(regex("^[A-Za-z0-9._-]+$", t.app_role))])
-    error_message = "Each tier app_role must match ^[A-Za-z0-9._-]+$ (Entra app-role value charset; no spaces or XML metacharacters)."
-  }
-  validation {
-    condition = alltrue(flatten([
-      for a in values(var.tiers)[*].app_role : [
-        for b in values(var.tiers)[*].app_role : a == b || !strcontains(b, a)
-      ]
-    ]))
-    error_message = "No tier's app_role may be a substring of another's (e.g. \"AI.Premium\" and \"AI.Premium2\") — the policy role check is a substring match on the comma-joined roles claim."
-  }
-  validation {
     condition     = alltrue([for t in var.tiers : contains(["Hourly", "Daily", "Weekly", "Monthly", "Yearly"], t.token_quota_period)])
     error_message = "Each tier token_quota_period must be one of Hourly, Daily, Weekly, Monthly, Yearly (llm-token-limit token-quota-period)."
   }
   validation {
     condition     = alltrue([for t in var.tiers : t.token_quota == null ? true : t.token_quota > 0])
     error_message = "Each tier token_quota, when set, must be greater than 0."
+  }
+}
+
+variable "default_tier" {
+  description = <<-EOT
+    Key in var.tiers whose limits apply to every admitted caller. May be omitted
+    when var.tiers has exactly one entry (that entry is used); with several
+    presets it must be set explicitly — the module never guesses which limits
+    a caller deserves.
+  EOT
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.default_tier != null ? contains(keys(var.tiers), var.default_tier) : length(var.tiers) == 1
+    error_message = "default_tier must name a key in var.tiers; it may only be omitted when var.tiers has exactly one entry."
   }
 }
 
@@ -586,8 +598,9 @@ variable "key_vault" {
 variable "existing_gateway_app" {
   description = <<-EOT
     Bring-your-own gateway app registration for tenants where Entra app creation
-    is restricted. The app must: be single-tenant, request v2 access tokens, and
-    define one Application app role per tier whose `value` matches tiers[*].app_role.
+    is restricted. The app must: be single-tenant, request v2 access tokens, have
+    a service principal in the tenant, and define ONE Application app role whose
+    `value` matches var.admission_app_role.
     Leave null (default) and the module creates and wires the app itself.
   EOT
   type = object({
