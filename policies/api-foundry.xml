@@ -43,5 +43,8 @@
     <llm-semantic-cache-store duration="${cache_duration}" />
 %{ endif ~}
   </outbound>
-  <on-error><base /></on-error>
+  <on-error>
+    <base />
+    <include-fragment fragment-id="ai-error-taxonomy" />
+  </on-error>
 </policies>

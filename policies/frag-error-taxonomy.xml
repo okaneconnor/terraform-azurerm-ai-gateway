@@ -1,0 +1,43 @@
+<fragment>
+  <!-- Stable error taxonomy: consumers branch on error.code, never on prose.
+       Unknown errors fall through to APIM's default handling. -->
+  <set-header name="x-correlation-id" exists-action="override">
+    <value>@(context.RequestId.ToString())</value>
+  </set-header>
+  <choose>
+    <when condition="@(context.LastError.Source == &quot;validate-azure-ad-token&quot;)">
+      <return-response>
+        <set-status code="401" reason="Unauthorized" />
+        <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+        <set-header name="x-correlation-id" exists-action="override"><value>@(context.RequestId.ToString())</value></set-header>
+        <set-body>{"error":{"message":"The provided token is invalid, expired, or does not carry the gateway admission role.","type":"authentication_error","code":"invalid_token"}}</set-body>
+      </return-response>
+    </when>
+    <when condition="@(context.LastError.Source == &quot;rate-limit-by-key&quot;)">
+      <return-response>
+        <set-status code="429" reason="Too Many Requests" />
+        <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+        <set-header name="Retry-After" exists-action="override"><value>60</value></set-header>
+        <set-header name="x-correlation-id" exists-action="override"><value>@(context.RequestId.ToString())</value></set-header>
+        <set-body>{"error":{"message":"Request rate limit exceeded.","type":"rate_limit_error","code":"rate_limit_exceeded"}}</set-body>
+      </return-response>
+    </when>
+    <when condition="@(context.LastError.Source == &quot;llm-token-limit&quot;)">
+      <return-response>
+        <set-status code="429" reason="Too Many Requests" />
+        <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+        <set-header name="Retry-After" exists-action="override"><value>60</value></set-header>
+        <set-header name="x-correlation-id" exists-action="override"><value>@(context.RequestId.ToString())</value></set-header>
+        <set-body>{"error":{"message":"Token limit or quota exceeded for this caller.","type":"rate_limit_error","code":"token_quota_exceeded"}}</set-body>
+      </return-response>
+    </when>
+    <when condition="@(context.LastError.Source == &quot;llm-content-safety&quot;)">
+      <return-response>
+        <set-status code="403" reason="Forbidden" />
+        <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+        <set-header name="x-correlation-id" exists-action="override"><value>@(context.RequestId.ToString())</value></set-header>
+        <set-body>{"error":{"message":"Request blocked by content safety policy.","type":"permission_error","code":"content_filtered"}}</set-body>
+      </return-response>
+    </when>
+  </choose>
+</fragment>

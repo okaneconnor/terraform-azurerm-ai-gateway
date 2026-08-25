@@ -1,10 +1,4 @@
 <fragment>
-  <!--
-    Request rate limit for the default tier preset, keyed by the calling app's
-    client id (the caller-app-id variable set by frag-entra-jwt) so every caller
-    gets its own counter. The admission role carries no tier: per-team presets and
-    overrides are applied by the onboarding registry's policy layer; callers
-    without one get these defaults.
-  -->
+  <!-- Default-preset rate limit, counter keyed per caller (caller-app-id). -->
   <rate-limit-by-key calls="${t.rate_limit_calls}" renewal-period="${renewal}" counter-key="@((string)context.Variables[&quot;caller-app-id&quot;])" />
 </fragment>

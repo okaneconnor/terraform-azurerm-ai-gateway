@@ -1,0 +1,262 @@
+openapi: "3.1.0"
+
+info:
+  title: AI Gateway v1
+  version: "1.0.0"
+  description: >
+    Versioned consumer contract for the AI gateway. Callers authenticate with an
+    Entra bearer token carrying the gateway admission role and request models by
+    canonical name — the gateway maps names to deployments (model_map), pins the
+    backend api-version, enforces limits and content safety, and returns a
+    stable, machine-readable error taxonomy. Streaming (stream: true) is
+    supported and returns server-sent events.
+
+security:
+  - EntraBearer: []
+
+components:
+  securitySchemes:
+    EntraBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Entra v2.0 token for the gateway app's scope
+        (<gateway_app_client_id>/.default), carrying the gateway admission role.
+        Workload identities only (client credentials or managed identity); no
+        delegated user flow.
+
+  schemas:
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant]
+        content:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+
+    ChatCompletionRequest:
+      type: object
+      required: [model, messages]
+      properties:
+        model:
+          type: string
+          description: >
+            Canonical model name from the gateway's model map. The gateway
+            resolves it to a deployment — callers never reference deployment
+            names.
+        messages:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        stream:
+          type: boolean
+          default: false
+          description: When true the response is a server-sent event stream.
+        max_completion_tokens:
+          type: integer
+          minimum: 1
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+        top_p:
+          type: number
+          minimum: 0
+          maximum: 1
+        frequency_penalty:
+          type: number
+          minimum: -2
+          maximum: 2
+        presence_penalty:
+          type: number
+          minimum: -2
+          maximum: 2
+        stop:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        user:
+          type: string
+
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          enum: [chat.completion]
+        created:
+          type: integer
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+              message:
+                type: object
+                properties:
+                  role:
+                    type: string
+                  content:
+                    type: string
+              finish_reason:
+                type: string
+        usage:
+          type: object
+          properties:
+            prompt_tokens:
+              type: integer
+            completion_tokens:
+              type: integer
+            total_tokens:
+              type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+            type:
+              type: string
+              enum:
+                - invalid_request_error
+                - authentication_error
+                - permission_error
+                - rate_limit_error
+                - api_error
+            code:
+              type: string
+
+paths:
+  /chat/completions:
+    post:
+      operationId: createChatCompletion
+      summary: Create a chat completion
+      description: >
+        Generates a model response. The model field is a canonical name; the
+        gateway maps it to a deployment and pins the backend api-version. Every
+        response carries x-correlation-id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatCompletionRequest"
+      responses:
+        "200":
+          description: Completion (JSON), or an SSE stream when stream=true.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatCompletionResponse"
+        "400":
+          description: Malformed request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalid_request:
+                  value:
+                    error:
+                      message: "model and messages are required."
+                      type: invalid_request_error
+                      code: invalid_request
+        "401":
+          description: Missing/invalid token, or token without the admission role.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalid_token:
+                  value:
+                    error:
+                      message: "The provided token is invalid, expired, or does not carry the gateway admission role."
+                      type: authentication_error
+                      code: invalid_token
+        "403":
+          description: Admitted, but the request was refused.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                missing_caller_id:
+                  value:
+                    error:
+                      message: "Token carries no caller application id (azp or appid claim)."
+                      type: permission_error
+                      code: missing_caller_id
+                content_filtered:
+                  value:
+                    error:
+                      message: "Request blocked by content safety policy."
+                      type: permission_error
+                      code: content_filtered
+        "404":
+          description: Unknown canonical model name.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                model_not_found:
+                  value:
+                    error:
+                      message: "Unknown model. Request a model by its canonical name from the gateway's published list."
+                      type: invalid_request_error
+                      code: model_not_found
+        "429":
+          description: Rate limit or token quota exceeded.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                rate_limit_exceeded:
+                  value:
+                    error:
+                      message: "Request rate limit exceeded."
+                      type: rate_limit_error
+                      code: rate_limit_exceeded
+                token_quota_exceeded:
+                  value:
+                    error:
+                      message: "Token limit or quota exceeded for this caller."
+                      type: rate_limit_error
+                      code: token_quota_exceeded
+        "500":
+          description: Unexpected gateway error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error:
+                  message: "An unexpected error occurred."
+                  type: api_error
+                  code: internal_error

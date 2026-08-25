@@ -1,10 +1,5 @@
 <fragment>
-  <!--
-    Admission is a single app role: the token either carries it or the caller is
-    not onboarded. Tier limits are NOT read from the roles claim — they key off
-    caller-app-id below, so admission (directory) and consumption config (repo)
-    stay separate concerns.
-  -->
+  <!-- Single admission role: tier/limits key off caller-app-id, not roles. -->
   <validate-azure-ad-token tenant-id="${tenant_id}" output-token-variable-name="entra-jwt" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized. Valid Entra ID token carrying the gateway admission role is required.">
     <audiences>
       <audience>${gateway_client_id}</audience>
@@ -42,7 +37,9 @@
     <when condition="@(string.IsNullOrEmpty((string)context.Variables[&quot;caller-app-id&quot;]))">
       <return-response>
         <set-status code="403" reason="Forbidden" />
-        <set-body>Token carries no caller application id (azp or appid claim).</set-body>
+        <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+        <set-header name="x-correlation-id" exists-action="override"><value>@(context.RequestId.ToString())</value></set-header>
+        <set-body>{"error":{"message":"Token carries no caller application id (azp or appid claim).","type":"permission_error","code":"missing_caller_id"}}</set-body>
       </return-response>
     </when>
   </choose>

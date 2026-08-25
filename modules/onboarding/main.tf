@@ -1,17 +1,10 @@
-# Declarative team onboarding for the AI gateway, in its own Terraform state.
-#
-# The registry YAML is the single source of truth: a team present in the file is
-# onboarded, a team removed is deprovisioned on the next apply. This module holds
-# azuread resources ONLY — an onboarding apply needs Entra permissions, never
-# gateway credentials, and can never plan the gateway itself.
+# Declarative team onboarding: the registry YAML is the source of truth.
+# azuread resources only — see README.md.
 
 locals {
   raw = yamldecode(file(var.registry_file))
 
-  # ── Normalisation ───────────────────────────────────────────────────────────
-  # Every field is read with try() so a malformed registry fails on the ONE
-  # precondition that names its actual problem, instead of crashing evaluation of
-  # every rule at once.
+  # try() everywhere: a malformed registry must fail on the rule that names it.
   team_allowed_keys    = ["team", "owner", "tier", "services"]
   service_allowed_keys = ["service", "client_id", "principal_object_id"]
 
@@ -36,13 +29,9 @@ locals {
     ]
   ])
 
-  # Derived-id uniqueness has to hold for the WHOLE key, not just per pair:
-  # team "a" + service "b-c" and team "a-b" + service "c" both derive "a-b-c",
-  # and a Terraform for_each would silently collapse them into one resource —
-  # one team quietly receiving another's assignment.
+  # Whole-key uniqueness: a/b-c and a-b/c both derive a-b-c (for_each collapse).
   derived_keys = [for s in local.services : s.key]
 
-  # Shapes shared by several rules.
   kebab_re = "^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$"
   guid_re  = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 
@@ -51,10 +40,9 @@ locals {
     { kind = "principal_object_id", value = s.principal_object_id, where = s.key },
   ]])
 
-  # A GUID whose every dash-group is one repeated character (11111111-2222-…) is
-  # a copied documentation example, not a real Entra id.
+  # Repeated-char dash-groups = a copied docs example; coalesce: && is not short-circuit on 1.9.x.
   placeholder_ids = [for i in local.all_ids : i if i.value != null && can(regex(local.guid_re, i.value)) && alltrue([
-    for g in split("-", i.value) : length(distinct(split("", g))) == 1
+    for g in split("-", coalesce(i.value, "x")) : length(distinct(split("", g))) == 1
   ])]
 
   principal_teams = { for s in local.services : s.principal_object_id => distinct([
@@ -62,9 +50,7 @@ locals {
   ])... if s.principal_object_id != null }
 }
 
-# Every rule is a resource precondition: preconditions HARD-fail the plan (check
-# blocks only warn outside terraform test), and each message names the offending
-# entry so a team can fix its own PR without platform help.
+# Preconditions hard-fail the plan; each message names the offending entry.
 resource "terraform_data" "registry_guard" {
   lifecycle {
     precondition {
@@ -130,7 +116,6 @@ resource "terraform_data" "registry_guard" {
   }
 }
 
-# The onboarding itself: one admission-role assignment per service identity.
 resource "azuread_app_role_assignment" "service" {
   for_each = { for s in local.services : s.key => s }
 
