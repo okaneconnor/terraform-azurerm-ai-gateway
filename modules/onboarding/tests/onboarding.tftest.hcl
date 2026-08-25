@@ -113,6 +113,30 @@ run "rejects_unknown_tier" {
   expect_failures = [terraform_data.registry_guard]
 }
 
+run "rejects_unknown_top_level_key" {
+  command = plan
+  variables { registry_file = "tests/fixtures/bad-top-level-key.yaml" }
+  expect_failures = [terraform_data.registry_guard]
+}
+
+run "rejects_service_missing_fields" {
+  command = plan
+  variables { registry_file = "tests/fixtures/bad-service-missing-fields.yaml" }
+  expect_failures = [terraform_data.registry_guard]
+}
+
+run "rejects_service_name_case" {
+  command = plan
+  variables { registry_file = "tests/fixtures/bad-service-name-case.yaml" }
+  expect_failures = [terraform_data.registry_guard]
+}
+
+run "rejects_client_id_shared_across_services" {
+  command = plan
+  variables { registry_file = "tests/fixtures/bad-shared-client-id.yaml" }
+  expect_failures = [terraform_data.registry_guard]
+}
+
 run "rejects_non_guid_gateway_inputs" {
   command = plan
   variables {
