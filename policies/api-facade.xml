@@ -1,0 +1,83 @@
+<policies>
+  <inbound>
+    <base />
+    <include-fragment fragment-id="ai-ip-allow" />
+    <include-fragment fragment-id="ai-auth-entra-jwt" />
+    <include-fragment fragment-id="ai-tier-rate" />
+    <include-fragment fragment-id="ai-tier-tokens" />
+    <!-- The contract: model + messages are required; model is a CANONICAL name
+         resolved to a deployment here. Callers never see deployment names, so
+         deployments and versions can churn without a consumer migration. -->
+    <set-variable name="requested-model" value="@{
+        var body = context.Request.Body?.As&lt;JObject&gt;(preserveContent: true);
+        return body != null &amp;&amp; body[&quot;model&quot;] != null ? (string)body[&quot;model&quot;] : &quot;&quot;;
+    }" />
+    <choose>
+      <when condition="@{
+          var body = context.Request.Body?.As&lt;JObject&gt;(preserveContent: true);
+          return body == null || body[&quot;model&quot;] == null || body[&quot;messages&quot;] == null;
+      }">
+        <return-response>
+          <set-status code="400" reason="Bad Request" />
+          <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+          <set-header name="x-correlation-id" exists-action="override"><value>@(context.RequestId.ToString())</value></set-header>
+          <set-body>{"error":{"message":"model and messages are required.","type":"invalid_request_error","code":"invalid_request"}}</set-body>
+        </return-response>
+      </when>
+    </choose>
+    <set-variable name="deployment" value="@{
+        var model = (string)context.Variables[&quot;requested-model&quot;];
+        switch (model) {
+%{ for canonical, deployment in model_map ~}
+          case &quot;${canonical}&quot;: return &quot;${deployment}&quot;;
+%{ endfor ~}
+          default: return &quot;&quot;;
+        }
+    }" />
+    <!-- Unknown model is an explicit 404, never a silent empty-deployment
+         rewrite that surfaces as a confusing backend error. -->
+    <choose>
+      <when condition="@(string.IsNullOrEmpty((string)context.Variables[&quot;deployment&quot;]))">
+        <return-response>
+          <set-status code="404" reason="Not Found" />
+          <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+          <set-header name="x-correlation-id" exists-action="override"><value>@(context.RequestId.ToString())</value></set-header>
+          <set-body>{"error":{"message":"Unknown model. Request a model by its canonical name from the gateway's published list.","type":"invalid_request_error","code":"model_not_found"}}</set-body>
+        </return-response>
+      </when>
+    </choose>
+    <!-- api-version is gateway-pinned: callers never send one, so a version bump
+         is gateway config, not a consumer migration. -->
+    <rewrite-uri template="@($"/deployments/{(string)context.Variables[&quot;deployment&quot;]}/chat/completions?api-version=${api_version}")" copy-unmatched-params="false" />
+    <!-- backend-mi must precede content-safety: the llm-content-safety call rides
+         on the Authorization header, which this fragment swaps to the MSI token. -->
+    <include-fragment fragment-id="ai-backend-managed-identity" />
+%{ if content_safety_enabled ~}
+    <!-- v1 is chat-only (no embeddings operation), so every request is screened —
+         and deliberately before the semantic cache, so cache hits cannot bypass
+         Prompt Shield. -->
+    <include-fragment fragment-id="ai-content-safety" />
+%{ endif ~}
+%{ if semantic_cache_enabled ~}
+    <llm-semantic-cache-lookup score-threshold="${score_threshold}" embeddings-backend-id="embeddings-backend" embeddings-backend-auth="system-assigned" ignore-system-messages="true">
+      <vary-by>@((string)context.Variables[&quot;caller-app-id&quot;])</vary-by>
+    </llm-semantic-cache-lookup>
+%{ endif ~}
+    <set-backend-service backend-id="foundry-pool" />
+    <include-fragment fragment-id="ai-token-metrics" />
+  </inbound>
+  <backend><base /></backend>
+  <outbound>
+    <base />
+%{ if semantic_cache_enabled ~}
+    <llm-semantic-cache-store duration="${cache_duration}" />
+%{ endif ~}
+    <set-header name="x-correlation-id" exists-action="override">
+      <value>@(context.RequestId.ToString())</value>
+    </set-header>
+  </outbound>
+  <on-error>
+    <base />
+    <include-fragment fragment-id="ai-error-taxonomy" />
+  </on-error>
+</policies>

@@ -361,6 +361,51 @@ variable "default_tier" {
   }
 }
 
+variable "model_map" {
+  description = <<-EOT
+    The versioned facade's model indirection: canonical model name (what callers
+    put in the request body) -> deployment name (what the gateway routes to).
+    Callers are never coupled to deployment names, so deployments and model
+    versions can churn without breaking a single consumer. Empty (default) maps
+    every deployment name to itself, so the facade works with zero config.
+    Aliasing two canonical names to one deployment is allowed (e.g. a "chat"
+    alias beside the concrete name during a migration).
+  EOT
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for canonical, deployment in var.model_map : contains(keys(var.model_deployments), deployment)])
+    error_message = "Every model_map value must be a key of model_deployments — the map points canonical names at deployments this gateway actually runs."
+  }
+  validation {
+    condition     = alltrue([for canonical, _ in var.model_map : can(regex("^[A-Za-z0-9._-]+$", canonical))])
+    error_message = "Canonical model names must match ^[A-Za-z0-9._-]+$ (they are matched verbatim against the request body's model field)."
+  }
+}
+
+variable "aoai_api_version" {
+  description = <<-EOT
+    Azure OpenAI data-plane api-version the FACADE sends to the backend. Callers
+    of /v1/chat/completions never supply an api-version — the gateway pins it, so
+    an api-version bump is a gateway config change, not a consumer migration.
+    (The legacy /openai path still passes the caller's api-version through.)
+  EOT
+  type        = string
+  default     = "2024-10-21"
+}
+
+variable "enable_legacy_openai_path" {
+  description = <<-EOT
+    Keep the raw /openai passthrough surface alongside the /v1 facade. The facade
+    is the recommended contract; the raw path remains the compatibility surface
+    for existing consumers. Disabling it removes the raw API entirely (v1-only
+    gateway).
+  EOT
+  type        = bool
+  default     = true
+}
+
 variable "rate_limit_renewal_seconds" {
   description = "Fixed-window length for the per-tier request rate limit."
   type        = number

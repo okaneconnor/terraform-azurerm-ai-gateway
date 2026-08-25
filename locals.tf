@@ -115,9 +115,14 @@ locals {
   content_safety_keys        = [for k, v in var.ai_services : k if v.kind == "ContentSafety"]
   content_safety_backend_key = length(local.content_safety_keys) > 0 ? local.content_safety_keys[0] : null
 
-  llm_apis = {
-    foundry = azurerm_api_management_api.foundry.id
-  }
+  # Facade model indirection: empty model_map means every deployment maps to
+  # itself, so the facade works with zero configuration.
+  effective_model_map = length(var.model_map) > 0 ? var.model_map : { for k, _ in var.model_deployments : k => k }
+
+  llm_apis = merge(
+    { facade = azurerm_api_management_api.facade.id },
+    var.enable_legacy_openai_path ? { foundry = azurerm_api_management_api.foundry["this"].id } : {}
+  )
 
   pool_members    = var.backend_pool.members
   created_members = { for k, m in local.pool_members : k => m if m.create_account != null }

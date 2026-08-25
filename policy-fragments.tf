@@ -59,6 +59,13 @@ resource "azurerm_api_management_policy_fragment" "token_metric" {
   value             = file("${path.module}/policies/frag-token-metric.xml")
 }
 
+resource "azurerm_api_management_policy_fragment" "error_taxonomy" {
+  api_management_id = azurerm_api_management.apim.id
+  name              = "ai-error-taxonomy"
+  format            = "xml"
+  value             = file("${path.module}/policies/frag-error-taxonomy.xml")
+}
+
 resource "azurerm_api_management_policy_fragment" "tier_rate" {
   api_management_id = azurerm_api_management.apim.id
   name              = "ai-tier-rate"

@@ -137,6 +137,39 @@ curl -s -X POST "$GATEWAY_URL/openai/deployments/gpt-5.4-mini/chat/completions?a
   -d '{"messages":[{"role":"user","content":"hello"}],"max_completion_tokens":100}'
 ```
 
+## Call a model — the /v1 facade (recommended contract)
+
+`POST <apim_gateway_url>/v1/chat/completions` is the versioned consumer surface.
+The `model` field is a **canonical name** the gateway maps to a deployment
+(`var.model_map`; the default maps every deployment name to itself), and the
+backend api-version is **gateway-pinned** (`var.aoai_api_version`) — callers
+never send one. Deployments, model versions and api-versions can all churn as
+gateway config without a consumer migration. `stream: true` returns SSE.
+
+```bash
+curl -s -X POST "$GATEWAY_URL/v1/chat/completions" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"model":"<canonical-name>","messages":[{"role":"user","content":"hello"}],"max_completion_tokens":16}'
+```
+
+Every response carries `x-correlation-id`, and every error is machine-readable —
+branch on `error.code`, never on prose:
+
+| Status | code | Meaning |
+| --- | --- | --- |
+| 400 | `invalid_request` | `model`/`messages` missing |
+| 401 | `invalid_token` | Missing/invalid token, or no admission role |
+| 403 | `missing_caller_id` | Token carries neither `azp` nor `appid` |
+| 403 | `content_filtered` | Content safety / Prompt Shield block |
+| 404 | `model_not_found` | Unknown canonical model name |
+| 429 | `rate_limit_exceeded` | Request rate limit (`Retry-After` set) |
+| 429 | `token_quota_exceeded` | Token limit/quota (`Retry-After` set) |
+
+The raw `/openai` passthrough remains available behind
+`enable_legacy_openai_path` (default on) as the compatibility surface — it
+speaks Azure's native paths and error bodies, plus the same taxonomy for
+gateway-raised errors.
+
 ## Onboarding a team (app-role assignment)
 
 1. The team creates (or provides) their Entra app registration `client_id`.

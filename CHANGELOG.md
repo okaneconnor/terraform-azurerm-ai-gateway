@@ -31,6 +31,28 @@ All notable changes to this module are documented here. The format follows
 
 ### Added
 
+- **Versioned facade `/v1/chat/completions`** (#38) — the gateway's recommended
+  consumer contract, decoupling callers from Azure's surface in both directions:
+  - **Model indirection**: callers request canonical names; `var.model_map` maps
+    them to deployments (default: identity map, zero-config). Deployments and
+    model versions can churn as gateway config without a consumer migration.
+    Unknown canonical name → explicit **404 `model_not_found`**, never a silent
+    empty rewrite surfacing as a confusing backend error.
+  - **Gateway-pinned api-version** (`var.aoai_api_version`): facade callers never
+    send one, so an api-version bump is gateway config, not a consumer change.
+  - **Streaming passes through** (`stream: true` → SSE) — documented in the
+    OpenAPI 3.1 spec shipped at `specs/ai-gateway-v1.yaml`.
+  - **Stable error taxonomy, gateway-wide**: a shared `ai-error-taxonomy`
+    fragment maps every known failure to `{"error":{"message","type","code"}}`
+    with `x-correlation-id` and `Retry-After` on 429s — codes: `invalid_token`,
+    `missing_caller_id`, `invalid_request`, `model_not_found`,
+    `content_filtered`, `rate_limit_exceeded`, `token_quota_exceeded`. Status
+    codes are unchanged from pre-taxonomy behaviour; only bodies and headers
+    gained structure. Wired into on-error of BOTH LLM surfaces; unknown errors
+    deliberately fall through rather than being masked by a catch-all.
+  - The raw `/openai` passthrough remains as the compatibility surface behind
+    `enable_legacy_openai_path` (default `true`; `moved` blocks keep existing
+    state addresses intact).
 - **`modules/onboarding` — declarative team registry in its own state** (#37).
   Teams live in one reviewed YAML file (`registry_file`); applying the submodule
   reconciles one admission-role assignment per service identity. The module holds

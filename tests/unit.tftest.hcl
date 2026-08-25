@@ -108,7 +108,7 @@ run "defaults" {
 
   # Content safety must screen BEFORE the semantic cache (cache hits stay screened).
   assert {
-    condition     = strcontains(split("llm-semantic-cache-lookup", azurerm_api_management_api_policy.foundry.xml_content)[0], "ai-content-safety")
+    condition     = strcontains(split("llm-semantic-cache-lookup", azurerm_api_management_api_policy.foundry["this"].xml_content)[0], "ai-content-safety")
     error_message = "ai-content-safety must precede llm-semantic-cache-lookup in the foundry policy."
   }
 
@@ -242,12 +242,12 @@ run "cache_and_safety_disabled" {
   }
 
   assert {
-    condition     = !strcontains(azurerm_api_management_api_policy.foundry.xml_content, "llm-semantic-cache-lookup")
+    condition     = !strcontains(azurerm_api_management_api_policy.foundry["this"].xml_content, "llm-semantic-cache-lookup")
     error_message = "Foundry policy must not reference the cache when disabled."
   }
 
   assert {
-    condition     = !strcontains(azurerm_api_management_api_policy.foundry.xml_content, "ai-content-safety")
+    condition     = !strcontains(azurerm_api_management_api_policy.foundry["this"].xml_content, "ai-content-safety")
     error_message = "Foundry policy must not include content safety when disabled."
   }
 }
@@ -338,7 +338,7 @@ run "full_stack_shape" {
       length(azapi_resource.api_center) == 1,
       length(azurerm_key_vault.main) == 1,
       length(azurerm_application_insights_workbook.apim) == 1,
-      length(azapi_resource.llm_diagnostic) == 1,
+      length(azapi_resource.llm_diagnostic) == 2, # facade + legacy foundry
     ])
     error_message = "Every optional component must be present in the full stack."
   }
@@ -587,6 +587,120 @@ run "internal_vnet_mode" {
   assert {
     condition     = azurerm_api_management.apim.virtual_network_type == "Internal"
     error_message = "apim_virtual_network_type must flow to the APIM resource."
+  }
+}
+
+# ── Versioned facade (#38): /v1, model indirection, error taxonomy ────────────
+
+run "facade_default_identity_map" {
+  command = plan
+
+  assert {
+    condition     = azurerm_api_management_api.facade.path == "v1"
+    error_message = "The facade must live at path v1."
+  }
+
+  # Empty model_map -> every deployment maps to itself, so the facade works with
+  # zero configuration.
+  assert {
+    condition = alltrue([
+      strcontains(azurerm_api_management_api_policy.facade.xml_content, "case &quot;chat&quot;: return &quot;chat&quot;;"),
+      strcontains(azurerm_api_management_api_policy.facade.xml_content, "case &quot;text-embedding-ada-002&quot;: return &quot;text-embedding-ada-002&quot;;"),
+    ])
+    error_message = "Default model_map must be the identity map over model_deployments."
+  }
+
+  # Unknown model is an explicit 404, never a silent empty rewrite.
+  assert {
+    condition     = strcontains(azurerm_api_management_api_policy.facade.xml_content, "model_not_found")
+    error_message = "The facade must return model_not_found for unknown canonical names."
+  }
+
+  # api-version is gateway-pinned into the rewrite.
+  assert {
+    condition     = strcontains(azurerm_api_management_api_policy.facade.xml_content, "api-version=2024-10-21")
+    error_message = "The facade must pin the backend api-version."
+  }
+
+  # Streaming passes through: the facade must carry NO stream rejection.
+  assert {
+    condition     = !strcontains(azurerm_api_management_api_policy.facade.xml_content, "streaming_not_supported")
+    error_message = "Streaming is supported in v1 — no rejection branch may exist."
+  }
+}
+
+run "facade_custom_model_map_replaces_identity" {
+  command = plan
+
+  variables {
+    model_map        = { fast = "chat" }
+    aoai_api_version = "2025-01-01"
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(azurerm_api_management_api_policy.facade.xml_content, "case &quot;fast&quot;: return &quot;chat&quot;;"),
+      !strcontains(azurerm_api_management_api_policy.facade.xml_content, "case &quot;text-embedding-ada-002&quot;"),
+      strcontains(azurerm_api_management_api_policy.facade.xml_content, "api-version=2025-01-01"),
+    ])
+    error_message = "A custom model_map must replace the identity map wholesale, and aoai_api_version must flow into the rewrite."
+  }
+}
+
+run "rejects_model_map_unknown_deployment" {
+  command = plan
+
+  variables {
+    model_map = { fast = "not-a-deployment" }
+  }
+
+  expect_failures = [var.model_map]
+}
+
+run "error_taxonomy_wired_into_both_surfaces" {
+  command = plan
+
+  variables {
+    # The JWT fragment's value is only known at plan with a BYO client id (the
+    # module-created app's client_id is computed) — same device as byo_gateway_app.
+    existing_gateway_app = { client_id = "11111111-1111-1111-1111-111111111111" }
+  }
+
+  # One fragment carries every code; both LLM policies include it in on-error.
+  assert {
+    condition = alltrue([
+      strcontains(azurerm_api_management_policy_fragment.error_taxonomy.value, "invalid_token"),
+      strcontains(azurerm_api_management_policy_fragment.error_taxonomy.value, "rate_limit_exceeded"),
+      strcontains(azurerm_api_management_policy_fragment.error_taxonomy.value, "token_quota_exceeded"),
+      strcontains(azurerm_api_management_policy_fragment.error_taxonomy.value, "content_filtered"),
+      strcontains(azurerm_api_management_policy_fragment.error_taxonomy.value, "Retry-After"),
+      strcontains(azurerm_api_management_api_policy.facade.xml_content, "ai-error-taxonomy"),
+      strcontains(azurerm_api_management_api_policy.foundry["this"].xml_content, "ai-error-taxonomy"),
+    ])
+    error_message = "The taxonomy fragment must carry every error code and be included in on-error of both LLM surfaces."
+  }
+
+  # The caller-id guard's inline 403 carries a taxonomy body too.
+  assert {
+    condition     = strcontains(azurerm_api_management_policy_fragment.entra_jwt.value, "missing_caller_id")
+    error_message = "The caller-app-id 403 must return the machine-readable missing_caller_id code."
+  }
+}
+
+run "legacy_path_disabled_leaves_facade_only" {
+  command = plan
+
+  variables {
+    enable_legacy_openai_path = false
+  }
+
+  assert {
+    condition = alltrue([
+      length(azurerm_api_management_api.foundry) == 0,
+      length(azurerm_api_management_api_policy.foundry) == 0,
+      azurerm_api_management_api.facade.path == "v1",
+    ])
+    error_message = "Disabling the legacy path must remove the raw /openai API and leave the facade standing."
   }
 }
 

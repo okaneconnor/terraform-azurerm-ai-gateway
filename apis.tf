@@ -8,7 +8,10 @@ resource "azurerm_api_management_backend" "svc" {
   url                 = trimsuffix(azurerm_cognitive_account.svc[each.key].endpoint, "/")
 }
 
+# The raw Azure OpenAI passthrough — now the compatibility surface behind
+# enable_legacy_openai_path; /v1 (facade.tf) is the recommended contract.
 resource "azurerm_api_management_api" "foundry" {
+  for_each              = var.enable_legacy_openai_path ? { this = {} } : {}
   name                  = "foundry-openai"
   api_management_name   = azurerm_api_management.apim.name
   resource_group_name   = local.resource_group_name
@@ -24,8 +27,19 @@ resource "azurerm_api_management_api" "foundry" {
   }
 }
 
+moved {
+  from = azurerm_api_management_api.foundry
+  to   = azurerm_api_management_api.foundry["this"]
+}
+
+moved {
+  from = azurerm_api_management_api_policy.foundry
+  to   = azurerm_api_management_api_policy.foundry["this"]
+}
+
 resource "azurerm_api_management_api_policy" "foundry" {
-  api_name            = azurerm_api_management_api.foundry.name
+  for_each            = var.enable_legacy_openai_path ? { this = {} } : {}
+  api_name            = azurerm_api_management_api.foundry["this"].name
   api_management_name = azurerm_api_management.apim.name
   resource_group_name = local.resource_group_name
   xml_content = templatefile("${path.module}/policies/api-foundry.xml", {
@@ -43,6 +57,7 @@ resource "azurerm_api_management_api_policy" "foundry" {
     azurerm_api_management_policy_fragment.backend_mi,
     azurerm_api_management_policy_fragment.content_safety,
     azurerm_api_management_policy_fragment.token_metric,
+    azurerm_api_management_policy_fragment.error_taxonomy,
     azapi_resource.foundry_pool,
     azurerm_api_management_backend.embeddings,
     azurerm_api_management_redis_cache.cache,
