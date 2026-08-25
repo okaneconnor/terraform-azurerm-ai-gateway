@@ -191,7 +191,9 @@ run "byo_missing_admission_role_fails" {
     admission_app_role   = "AI.Gateway.Other"
   }
 
-  expect_failures = [check.byo_admission_role]
+  # Both guards fire: the advisory check AND the output precondition that
+  # hard-fails a real plan (check blocks only fail under terraform test).
+  expect_failures = [check.byo_admission_role, output.gateway_app_role_id]
 }
 
 # caller-app-id is the counter-key for the rate limit and the token limit/quota, and

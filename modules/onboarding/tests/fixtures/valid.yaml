@@ -1,0 +1,19 @@
+version: v1
+teams:
+  - team: team-alpha
+    owner: alpha-devs
+    tier: standard
+    services:
+      - service: chat
+        client_id: a1b2c3d4-0001-4aaa-9bbb-1234567890ab
+        principal_object_id: a1b2c3d4-0002-4aaa-9bbb-1234567890ab
+      - service: summariser
+        client_id: a1b2c3d4-0003-4aaa-9bbb-1234567890ab
+        principal_object_id: a1b2c3d4-0004-4aaa-9bbb-1234567890ab
+  - team: team-beta
+    owner: beta-devs
+    tier: premium
+    services:
+      - service: chat
+        client_id: a1b2c3d4-0005-4aaa-9bbb-1234567890ab
+        principal_object_id: a1b2c3d4-0006-4aaa-9bbb-1234567890ab

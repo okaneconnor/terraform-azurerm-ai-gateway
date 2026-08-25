@@ -29,20 +29,50 @@ Admission and configuration are deliberately separate concerns:
 
 ## 1. Admit the team (assign the admission role)
 
-### Terraform (recommended)
+### The team registry (recommended)
 
-Onboarding lives in its **own Terraform state**, wired to the gateway purely by
-outputs — an onboarding apply touches one `azuread_app_role_assignment` and can
-never plan the gateway itself. The applying principal needs Entra permissions
-only, not gateway credentials.
+Onboarding is a **reviewed YAML file in its own Terraform state**, applied with
+the [`modules/onboarding`](../modules/onboarding/README.md) submodule — wired to
+the gateway purely by outputs, so an onboarding apply can never plan the gateway
+and needs Entra permissions only. A team onboards, changes tier, adds a service
+or offboards by pull request; validation fails the plan with a message naming
+the offending entry, and the PR diff is the audit trail.
+
+```yaml
+# teams.yaml — add your team, raise the PR
+version: v1
+teams:
+  - team: team-alpha
+    owner: alpha-devs
+    tier: standard
+    services:
+      - service: chat
+        client_id: <app/client GUID>
+        principal_object_id: <SP object GUID>
+```
 
 ```hcl
-# A tiny, separate configuration — not part of the gateway state.
-data "terraform_remote_state" "gateway" {
-  backend = "azurerm" # wherever the gateway's state lives
-  config  = { /* ... */ }
-}
+module "onboarding" {
+  source  = "okaneconnor/ai-gateway/azurerm//modules/onboarding"
+  version = "~> 2.0"
 
+  registry_file         = "${path.module}/teams.yaml"
+  gateway_app_object_id = data.terraform_remote_state.gateway.outputs.gateway_app_object_id
+  gateway_app_role_id   = data.terraform_remote_state.gateway.outputs.gateway_app_role_id
+  tier_names            = data.terraform_remote_state.gateway.outputs.tier_names
+}
+```
+
+See the [submodule README](../modules/onboarding/README.md) for the schema, the
+validation rules, and the full lifecycle. `examples/onboarding` is a runnable
+two-state layout.
+
+### Raw Terraform (one-off)
+
+The registry is the recommended shape; a single ad-hoc admission is just the
+resource the registry manages for you:
+
+```hcl
 resource "azuread_app_role_assignment" "team_chat_service" {
   app_role_id         = data.terraform_remote_state.gateway.outputs.gateway_app_role_id
   principal_object_id = "<team service principal OBJECT id>"

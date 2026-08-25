@@ -31,6 +31,23 @@ All notable changes to this module are documented here. The format follows
 
 ### Added
 
+- **`modules/onboarding` — declarative team registry in its own state** (#37).
+  Teams live in one reviewed YAML file (`registry_file`); applying the submodule
+  reconciles one admission-role assignment per service identity. The module holds
+  azuread resources only and couples to the gateway through three outputs, so an
+  onboarding apply needs Entra permissions — never gateway credentials — and can
+  never plan the gateway. Fourteen plan-time validation rules each fail with a
+  message naming the offending entry: unknown-key typo guard, placeholder-GUID
+  detection, derived-key hyphen-ambiguity collisions, identity-claimed-once
+  (client id and principal), tier-must-exist-on-the-gateway, and the rest — every
+  rule carries a failing-case unit test (13-run suite,
+  `terraform -chdir=modules/onboarding test`, wired into CI). `examples/onboarding`
+  ships the two-state layout, and `docs/onboarding.md` now leads with the
+  registry as the recommended path.
+- **BYO admission-role guard hard-fails the plan** — the `gateway_app_role_id`
+  output gained a precondition; the `check` introduced with #36 only warns in a
+  real plan (checks hard-fail only under `terraform test`), and a consumer
+  onboarding state must never receive a null role id.
 - **Consumer-integration outputs for out-of-state onboarding** (#36):
   `gateway_app_object_id` and `gateway_app_role_id` — exactly the two values an
   external `azuread_app_role_assignment` needs, resolved identically in
