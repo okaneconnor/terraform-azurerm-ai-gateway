@@ -51,7 +51,8 @@ output "gateway_app_role_id" {
   # a real plan — they only fail under terraform test. An onboarding state
   # consuming a null role id must be impossible, so this is a precondition.)
   precondition {
-    condition     = var.existing_gateway_app == null || local.gateway_admission_role_id != null
+    # Ternary, not ||: see check.byo_admission_role — 1.9.x unknown-handling.
+    condition     = var.existing_gateway_app == null ? true : local.gateway_admission_role_id != null
     error_message = "The bring-your-own gateway app defines no app role with value \"${var.admission_app_role}\" — add it to the app registration, or align var.admission_app_role with the role it does define."
   }
 }

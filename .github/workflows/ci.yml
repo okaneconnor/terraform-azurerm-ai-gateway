@@ -57,7 +57,7 @@ jobs:
       # Trivy replaces tfsec, which Aqua Security has retired. tfsec's HCL parser
       # also predates Terraform 1.5 `check` blocks and fails on the name_lengths check.
       - name: trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: config
           scan-ref: .

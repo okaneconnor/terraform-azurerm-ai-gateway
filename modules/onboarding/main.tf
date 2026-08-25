@@ -53,8 +53,11 @@ locals {
 
   # A GUID whose every dash-group is one repeated character (11111111-2222-…) is
   # a copied documentation example, not a real Entra id.
+  # coalesce guards the split: HCL's && does not short-circuit on Terraform
+  # 1.9.x (this module's floor), so without it a null id errors here instead of
+  # failing the required-fields rule with its proper message.
   placeholder_ids = [for i in local.all_ids : i if i.value != null && can(regex(local.guid_re, i.value)) && alltrue([
-    for g in split("-", i.value) : length(distinct(split("", g))) == 1
+    for g in split("-", coalesce(i.value, "x")) : length(distinct(split("", g))) == 1
   ])]
 
   principal_teams = { for s in local.services : s.principal_object_id => distinct([

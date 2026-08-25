@@ -56,7 +56,11 @@ locals {
 # state.
 check "byo_admission_role" {
   assert {
-    condition     = var.existing_gateway_app == null || local.gateway_admission_role_id != null
+    # Ternary, not ||: on Terraform 1.9.x (this module's floor) `true || unknown`
+    # evaluates unknown — in created mode the role id is unknown at plan and the
+    # check would error under terraform test. A known selector never evaluates
+    # the untaken branch.
+    condition     = var.existing_gateway_app == null ? true : local.gateway_admission_role_id != null
     error_message = "The bring-your-own gateway app defines no app role with value \"${var.admission_app_role}\" — add it to the app registration, or align var.admission_app_role with the role it does define."
   }
 }

@@ -629,6 +629,26 @@ run "facade_default_identity_map" {
   }
 }
 
+# The facade must uphold the same ordering guarantee as the raw path: content
+# safety BEFORE the semantic cache, so cache hits cannot bypass Prompt Shield.
+run "facade_content_safety_precedes_cache" {
+  command = plan
+
+  variables {
+    semantic_cache = { enabled = true }
+  }
+
+  assert {
+    condition     = strcontains(split("llm-semantic-cache-lookup", azurerm_api_management_api_policy.facade.xml_content)[0], "ai-content-safety")
+    error_message = "ai-content-safety must precede llm-semantic-cache-lookup in the facade policy."
+  }
+
+  assert {
+    condition     = strcontains(azurerm_api_management_api_policy.facade.xml_content, "llm-semantic-cache-store")
+    error_message = "The facade must store completions in the semantic cache when enabled."
+  }
+}
+
 run "facade_custom_model_map_replaces_identity" {
   command = plan
 
