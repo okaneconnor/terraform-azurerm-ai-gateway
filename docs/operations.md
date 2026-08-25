@@ -47,6 +47,16 @@ Redis (smallest SKU, 24/7 — disable `semantic_cache` if unused), Content Safet
 per-call (every prompt), and per-token model usage. `terraform destroy` your
 deployment when not in use.
 
+## Live verification (maintainers)
+
+`scripts/verify-live.sh` runs the full consumer-contract battery against a
+deployed gateway: facade success paths, every error-taxonomy code, streaming,
+correlation ids, legacy coexistence, and (opt-in `RUN_BURST=1`) the rate-limit
+burst. Env-driven — see the script header for the required values; secrets
+reach curl via stdin config and are never printed. Used for fresh-deployment
+verification and pre-release checks; it is maintainer tooling, not a consumer
+artifact.
+
 ## Linting & security scanning
 
 ```bash
