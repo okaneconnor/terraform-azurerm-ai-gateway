@@ -90,9 +90,7 @@ run "defaults" {
     error_message = "All AI service accounts must be Entra-only (no API keys)."
   }
 
-  # The admission role carries no tier: the rate fragment renders the default
-  # preset's numbers unconditionally (per-team differentiation is the onboarding
-  # registry's job), keyed per caller.
+  # Default preset renders unconditionally, keyed per caller.
   assert {
     condition = alltrue([
       strcontains(azurerm_api_management_policy_fragment.tier_rate.value, "calls=\"30\""),
@@ -158,8 +156,6 @@ run "byo_gateway_app" {
     error_message = "BYO gateway app must skip the module-created app registration."
   }
 
-  # With a known client_id the JWT fragment is fully known at plan: assert the
-  # audience, the single admission role, and the caller-app-id set-variable.
   assert {
     condition = alltrue([
       strcontains(azurerm_api_management_policy_fragment.entra_jwt.value, "11111111-1111-1111-1111-111111111111"),
@@ -169,8 +165,6 @@ run "byo_gateway_app" {
     error_message = "JWT fragment must pin the BYO audience, require the admission role, and set caller-app-id."
   }
 
-  # The onboarding outputs resolve through the data source in BYO mode — the
-  # values an external azuread_app_role_assignment consumes.
   assert {
     condition = alltrue([
       output.gateway_app_object_id == "00000000-0000-0000-0000-000000000010",
@@ -181,8 +175,6 @@ run "byo_gateway_app" {
   }
 }
 
-# A BYO app that never defined the admission role must fail the plan loudly, not
-# emit a null role id that breaks the consumer's onboarding state later.
 run "byo_missing_admission_role_fails" {
   command = plan
 
@@ -191,8 +183,6 @@ run "byo_missing_admission_role_fails" {
     admission_app_role   = "AI.Gateway.Other"
   }
 
-  # Both guards fire: the advisory check AND the output precondition that
-  # hard-fails a real plan (check blocks only fail under terraform test).
   expect_failures = [check.byo_admission_role, output.gateway_app_role_id]
 }
 
@@ -265,7 +255,6 @@ run "extra_tier_and_demo_clients" {
     }
   }
 
-  # default_tier selects which preset renders into the limit fragments.
   assert {
     condition = alltrue([
       strcontains(azurerm_api_management_policy_fragment.tier_tokens.value, "tokens-per-minute=\"500000\""),
@@ -343,8 +332,6 @@ run "full_stack_shape" {
     error_message = "Every optional component must be present in the full stack."
   }
 
-  # Per-preset demo objects: 3 demo clients, secrets, and role assignments —
-  # every one admitted by the same single role.
   assert {
     condition = alltrue([
       length(azuread_application.demo) == 3,
@@ -373,7 +360,6 @@ run "semantic_cache_default_off" {
   }
 }
 
-# With several presets the module never guesses a caller's limits.
 run "rejects_multiple_tiers_without_default" {
   command = plan
 
@@ -600,8 +586,6 @@ run "facade_default_identity_map" {
     error_message = "The facade must live at path v1."
   }
 
-  # Empty model_map -> every deployment maps to itself, so the facade works with
-  # zero configuration.
   assert {
     condition = alltrue([
       strcontains(azurerm_api_management_api_policy.facade.xml_content, "case &quot;chat&quot;: return &quot;chat&quot;;"),
@@ -610,27 +594,22 @@ run "facade_default_identity_map" {
     error_message = "Default model_map must be the identity map over model_deployments."
   }
 
-  # Unknown model is an explicit 404, never a silent empty rewrite.
   assert {
     condition     = strcontains(azurerm_api_management_api_policy.facade.xml_content, "model_not_found")
     error_message = "The facade must return model_not_found for unknown canonical names."
   }
 
-  # api-version is gateway-pinned into the rewrite.
   assert {
     condition     = strcontains(azurerm_api_management_api_policy.facade.xml_content, "api-version=2024-10-21")
     error_message = "The facade must pin the backend api-version."
   }
 
-  # Streaming passes through: the facade must carry NO stream rejection.
   assert {
     condition     = !strcontains(azurerm_api_management_api_policy.facade.xml_content, "streaming_not_supported")
     error_message = "Streaming is supported in v1 — no rejection branch may exist."
   }
 }
 
-# The facade must uphold the same ordering guarantee as the raw path: content
-# safety BEFORE the semantic cache, so cache hits cannot bypass Prompt Shield.
 run "facade_content_safety_precedes_cache" {
   command = plan
 
@@ -681,12 +660,9 @@ run "error_taxonomy_wired_into_both_surfaces" {
   command = plan
 
   variables {
-    # The JWT fragment's value is only known at plan with a BYO client id (the
-    # module-created app's client_id is computed) — same device as byo_gateway_app.
     existing_gateway_app = { client_id = "11111111-1111-1111-1111-111111111111" }
   }
 
-  # One fragment carries every code; both LLM policies include it in on-error.
   assert {
     condition = alltrue([
       strcontains(azurerm_api_management_policy_fragment.error_taxonomy.value, "invalid_token"),
@@ -700,7 +676,6 @@ run "error_taxonomy_wired_into_both_surfaces" {
     error_message = "The taxonomy fragment must carry every error code and be included in on-error of both LLM surfaces."
   }
 
-  # The caller-id guard's inline 403 carries a taxonomy body too.
   assert {
     condition     = strcontains(azurerm_api_management_policy_fragment.entra_jwt.value, "missing_caller_id")
     error_message = "The caller-app-id 403 must return the machine-readable missing_caller_id code."

@@ -44,8 +44,6 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
       - run: terraform init -backend=false
       - run: terraform test
-      # The onboarding submodule carries its own test suite (its provider set is
-      # a strict subset of the root's, so the suites stay siloed).
       - run: terraform -chdir=modules/onboarding init -backend=false
       - run: terraform -chdir=modules/onboarding test
 
@@ -54,8 +52,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Trivy replaces tfsec, which Aqua Security has retired. tfsec's HCL parser
-      # also predates Terraform 1.5 `check` blocks and fails on the name_lengths check.
       - name: trivy
         uses: aquasecurity/trivy-action@v0.36.0
         with:

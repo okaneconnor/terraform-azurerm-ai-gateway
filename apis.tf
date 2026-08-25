@@ -8,8 +8,7 @@ resource "azurerm_api_management_backend" "svc" {
   url                 = trimsuffix(azurerm_cognitive_account.svc[each.key].endpoint, "/")
 }
 
-# The raw Azure OpenAI passthrough — now the compatibility surface behind
-# enable_legacy_openai_path; /v1 (facade.tf) is the recommended contract.
+# Raw passthrough (compat surface); /v1 is the recommended contract.
 resource "azurerm_api_management_api" "foundry" {
   for_each              = var.enable_legacy_openai_path ? { this = {} } : {}
   name                  = "foundry-openai"

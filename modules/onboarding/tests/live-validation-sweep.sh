@@ -1,22 +1,9 @@
 #!/usr/bin/env bash
 #
-# Live validation sweep for modules/onboarding: runs a REAL terraform plan per
-# failing fixture (real azuread provider, real gateway output values) and asserts
-# the plan fails with THAT rule's specific message.
-#
-# Why this exists alongside the unit suite: terraform test's expect_failures can
-# only assert that the guard resource failed — not WHICH precondition fired. A
-# fixture tripping the wrong rule would pass the unit test and mask a broken
-# rule. This sweep is the per-rule, per-message proof.
-#
-# Required environment (no defaults — these are deployment values):
-#   GATEWAY_APP_OBJECT_ID   gateway module output
-#   GATEWAY_APP_ROLE_ID     gateway module output
-#
-# Fixtures reference tiers "standard"/"premium", so the sweep passes those as
-# tier_names for every case except the tier rule, which needs the mismatch.
-#
-# Output discipline: case names and PASS/FAIL only.
+# Per-rule live sweep: real plan per failing fixture, asserting each rule's
+# SPECIFIC message (unit expect_failures can't tell which precondition fired).
+# Required env: GATEWAY_APP_OBJECT_ID, GATEWAY_APP_ROLE_ID.
+# Output: case names and PASS/FAIL only.
 
 set -uo pipefail
 
@@ -88,14 +75,12 @@ while IFS='|' read -r fixture expected; do
   run_case "$fixture" "$expected" '["standard","premium"]'
 done <<< "$CASES"
 
-# The valid registry must plan cleanly: one assignment per service, none applied.
 cp "$FIXTURES/valid.yaml" "$WORK/teams.yaml"
 out=$(cd "$WORK" && terraform plan -no-color -var 'tier_names=["standard","premium"]' 2>&1)
 if [ $? -ne 0 ]; then
   printf '  FAIL  valid.yaml: plan errored\n'; failed=$((failed+1))
 elif printf '%s' "$out" | grep -q "4 to add, 0 to change, 0 to destroy" \
   && [ "$(printf '%s' "$out" | grep -c 'azuread_app_role_assignment.service\[')" -eq 3 ]; then
-  # 3 assignments + the registry_guard resource itself.
   printf '  PASS  valid.yaml -> plans 3 assignments + guard\n'; passed=$((passed+1))
 else
   printf '  FAIL  valid.yaml: unexpected plan summary\n'; failed=$((failed+1))

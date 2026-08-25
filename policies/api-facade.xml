@@ -5,9 +5,6 @@
     <include-fragment fragment-id="ai-auth-entra-jwt" />
     <include-fragment fragment-id="ai-tier-rate" />
     <include-fragment fragment-id="ai-tier-tokens" />
-    <!-- The contract: model + messages are required; model is a CANONICAL name
-         resolved to a deployment here. Callers never see deployment names, so
-         deployments and versions can churn without a consumer migration. -->
     <set-variable name="requested-model" value="@{
         var body = context.Request.Body?.As&lt;JObject&gt;(preserveContent: true);
         return body != null &amp;&amp; body[&quot;model&quot;] != null ? (string)body[&quot;model&quot;] : &quot;&quot;;
@@ -34,8 +31,6 @@
           default: return &quot;&quot;;
         }
     }" />
-    <!-- Unknown model is an explicit 404, never a silent empty-deployment
-         rewrite that surfaces as a confusing backend error. -->
     <choose>
       <when condition="@(string.IsNullOrEmpty((string)context.Variables[&quot;deployment&quot;]))">
         <return-response>
@@ -46,16 +41,12 @@
         </return-response>
       </when>
     </choose>
-    <!-- api-version is gateway-pinned: callers never send one, so a version bump
-         is gateway config, not a consumer migration. -->
     <rewrite-uri template="@($"/deployments/{(string)context.Variables[&quot;deployment&quot;]}/chat/completions?api-version=${api_version}")" copy-unmatched-params="false" />
     <!-- backend-mi must precede content-safety: the llm-content-safety call rides
          on the Authorization header, which this fragment swaps to the MSI token. -->
     <include-fragment fragment-id="ai-backend-managed-identity" />
 %{ if content_safety_enabled ~}
-    <!-- v1 is chat-only (no embeddings operation), so every request is screened —
-         and deliberately before the semantic cache, so cache hits cannot bypass
-         Prompt Shield. -->
+    <!-- Before the cache: cache hits must not bypass Prompt Shield. -->
     <include-fragment fragment-id="ai-content-safety" />
 %{ endif ~}
 %{ if semantic_cache_enabled ~}

@@ -1,16 +1,6 @@
 <fragment>
-  <!--
-    Gateway-wide error taxonomy: every known failure maps to a stable
-    machine-readable body {"error":{"message","type","code"}} with
-    x-correlation-id, so consumers branch on `code`, never on prose. Status codes
-    are unchanged from pre-taxonomy behaviour - only bodies and headers gain
-    structure. Unknown errors deliberately fall through to APIM's default
-    handling rather than being masked by a catch-all.
-
-    "The screen said no" (content_filtered) is a deliberate 403; a screen that
-    COULD NOT answer surfaces as the backend error it is - the two must never
-    look the same to a caller.
-  -->
+  <!-- Stable error taxonomy: consumers branch on error.code, never on prose.
+       Unknown errors fall through to APIM's default handling. -->
   <set-header name="x-correlation-id" exists-action="override">
     <value>@(context.RequestId.ToString())</value>
   </set-header>

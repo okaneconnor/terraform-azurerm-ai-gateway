@@ -1,10 +1,5 @@
 <fragment>
-  <!--
-    Admission is a single app role: the token either carries it or the caller is
-    not onboarded. Tier limits are NOT read from the roles claim — they key off
-    caller-app-id below, so admission (directory) and consumption config (repo)
-    stay separate concerns.
-  -->
+  <!-- Single admission role: tier/limits key off caller-app-id, not roles. -->
   <validate-azure-ad-token tenant-id="${tenant_id}" output-token-variable-name="entra-jwt" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized. Valid Entra ID token carrying the gateway admission role is required.">
     <audiences>
       <audience>${gateway_client_id}</audience>

@@ -1,8 +1,4 @@
 <fragment>
-  <!--
-    LLM tokens-per-minute limit (LLM APIs only) for the default tier preset,
-    keyed by the calling app's client id — same default-preset model as
-    frag-tier-rate.
-  -->
+  <!-- Default-preset token limit, counter keyed per caller (caller-app-id). -->
   <llm-token-limit tokens-per-minute="${t.tokens_per_minute}"%{ if t.token_quota != null } token-quota="${t.token_quota}" token-quota-period="${t.token_quota_period}"%{ endif } estimate-prompt-tokens="false" counter-key="@((string)context.Variables[&quot;caller-app-id&quot;])" />
 </fragment>

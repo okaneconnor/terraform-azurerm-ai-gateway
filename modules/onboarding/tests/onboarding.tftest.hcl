@@ -1,8 +1,5 @@
-# Unit tests for modules/onboarding — plan-mode against a mocked azuread provider.
-# Run from the submodule: terraform -chdir=modules/onboarding test
-#
-# Every validation rule has a failing-case run: a rule without a failing test is
-# a rule that can silently stop working.
+# Run from the submodule: terraform -chdir=modules/onboarding test.
+# Every validation rule has a failing-case run.
 
 mock_provider "azuread" {}
 
@@ -19,7 +16,6 @@ run "valid_registry_onboards_every_service" {
     registry_file = "tests/fixtures/valid.yaml"
   }
 
-  # 2 teams, 3 services -> 3 assignments keyed <team>-<service>.
   assert {
     condition = alltrue([
       length(azuread_app_role_assignment.service) == 3,
@@ -92,9 +88,6 @@ run "rejects_duplicate_team" {
   expect_failures = [terraform_data.registry_guard]
 }
 
-# team "acme" + service "pay-api" and team "acme-pay" + service "api" both derive
-# the key "acme-pay-api"; a for_each would silently collapse them into one
-# resource — one team quietly receiving another's assignment.
 run "rejects_hyphen_ambiguous_derived_keys" {
   command = plan
   variables { registry_file = "tests/fixtures/bad-derived-collision.yaml" }

@@ -46,12 +46,8 @@ output "gateway_app_role_id" {
   EOT
   value       = local.gateway_admission_role_id
 
-  # Hard-fails the plan in BYO mode when the app never defined the admission role.
-  # (check "byo_admission_role" also covers this, but check blocks are advisory in
-  # a real plan — they only fail under terraform test. An onboarding state
-  # consuming a null role id must be impossible, so this is a precondition.)
   precondition {
-    # Ternary, not ||: see check.byo_admission_role — 1.9.x unknown-handling.
+    # Precondition (checks only warn in real plans); ternary for 1.9.x unknowns.
     condition     = var.existing_gateway_app == null ? true : local.gateway_admission_role_id != null
     error_message = "The bring-your-own gateway app defines no app role with value \"${var.admission_app_role}\" — add it to the app registration, or align var.admission_app_role with the role it does define."
   }

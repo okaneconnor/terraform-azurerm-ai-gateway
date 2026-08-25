@@ -1,10 +1,5 @@
-# The versioned facade — the gateway's recommended consumer contract.
-#
-# /v1/chat/completions takes canonical model names and returns the stable error
-# taxonomy. Callers are decoupled from deployment names (model_map) and from the
-# backend api-version (gateway-pinned): both can churn as gateway config without
-# a consumer migration. The raw /openai passthrough remains available behind
-# enable_legacy_openai_path as the compatibility surface.
+# Versioned facade: /v1/chat/completions — canonical model names (model_map),
+# gateway-pinned api-version, stable error taxonomy. See docs/usage.md.
 
 resource "azurerm_api_management_api" "facade" {
   name                  = "ai-gateway-v1"

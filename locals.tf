@@ -29,22 +29,8 @@ locals {
   }
   region_short = lookup(local.region_short_map, var.location, var.location)
 
-  # ── Naming ──────────────────────────────────────────────────────────────────
-  # Azure CAF convention, one fixed token order for every resource:
-  #
-  #     <type>-<name_prefix>[-<environment>][-<region>][-<instance>]
-  #
-  # `type` is the CAF resource abbreviation and always comes FIRST
-  # (learn.microsoft.com/azure/cloud-adoption-framework/ready/azure-best-practices/resource-abbreviations).
-  # Optional tokens drop out cleanly when null, so a minimal deployment reads
-  # `apim-aigw-uks` and a full one `apim-aigw-prod-uks-002`.
-  #
-  # This block is the ONLY place a resource name is constructed. Anything that needs
-  # a name takes it from here — a name built inline elsewhere is a bug, because it
-  # escapes both the convention and the length checks below.
-  #
-  # Names are fully deterministic: the module generates no random component, so the
-  # caller owns uniqueness for globally-scoped names. See docs/naming.md.
+  # CAF naming: <type>-<name_prefix>[-<environment>][-<region>][-<instance>].
+  # The ONLY place names are constructed. Deterministic — see docs/naming.md.
   name_base = join("-", compact([
     var.name_prefix,
     var.environment,
@@ -52,10 +38,6 @@ locals {
     var.instance,
   ]))
 
-  # Resources whose scope is a parent (subnets, NSG rules, PE connections, DNS links,
-  # diagnostic settings, APIM child resources) are named short and descriptively
-  # instead — they are already unique within that parent, so repeating the base is
-  # noise. Documented as a deliberate exception in docs/naming.md.
   rg_name      = coalesce(var.custom_names.resource_group, "rg-${local.name_base}")
   apim_name    = coalesce(var.custom_names.apim, "apim-${local.name_base}")
   law_name     = coalesce(var.custom_names.log_analytics, "log-${local.name_base}")
@@ -65,14 +47,8 @@ locals {
   redis_name   = coalesce(var.custom_names.redis, "amr-${local.name_base}")
   vnet_name    = coalesce(var.custom_names.vnet, "vnet-${local.name_base}")
 
-  # Key Vault takes hyphens but caps at 24 chars, which the composed name can exceed
-  # once environment/instance are set. Truncating silently would risk two deployments
-  # colliding on the same clipped name, so the cap is asserted at plan time instead
-  # (see check "name_lengths" below) and the caller shortens name_prefix or sets
-  # custom_names.key_vault.
   kv_name = coalesce(var.custom_names.key_vault, "kv-${local.name_base}")
 
-  # Every generated name that Azure length-caps, checked before anything is created.
   name_length_caps = {
     "key_vault (custom_names.key_vault)"   = { name = local.kv_name, max = 24 }
     "apim (custom_names.apim)"             = { name = local.apim_name, max = 50 }
@@ -106,17 +82,12 @@ locals {
 
   gateway_client_id = var.existing_gateway_app != null ? var.existing_gateway_app.client_id : azuread_application.gateway["this"].client_id
 
-  # The preset applied to every admitted caller: var.default_tier, or the single
-  # entry when only one preset is defined (the default_tier validation guarantees
-  # one of the two holds).
   default_tier_key  = var.default_tier != null ? var.default_tier : keys(var.tiers)[0]
   default_tier_spec = var.tiers[local.default_tier_key]
 
   content_safety_keys        = [for k, v in var.ai_services : k if v.kind == "ContentSafety"]
   content_safety_backend_key = length(local.content_safety_keys) > 0 ? local.content_safety_keys[0] : null
 
-  # Facade model indirection: empty model_map means every deployment maps to
-  # itself, so the facade works with zero configuration.
   effective_model_map = length(var.model_map) > 0 ? var.model_map : { for k, _ in var.model_deployments : k => k }
 
   llm_apis = merge(
@@ -153,16 +124,11 @@ locals {
     : "${trimsuffix(m.endpoint_url, "/")}/openai"
   }
 
-  # Pool members are siblings of the platform Foundry account, so the member key is
-  # the discriminator: aif-<member>-<base>.
   member_account_name = { for k, m in local.created_members : k =>
     substr(lower("aif-${k}-${local.name_base}"), 0, 63)
   }
 }
 
-# Length caps are asserted rather than silently truncated: a clipped name can collide
-# with another deployment's clipped name, which surfaces as a confusing "already
-# exists" at apply instead of a clear message here.
 check "name_lengths" {
   assert {
     condition = alltrue([

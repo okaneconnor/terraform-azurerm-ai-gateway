@@ -321,9 +321,7 @@ variable "tiers" {
     token_quota        = optional(number)
     token_quota_period = optional(string, "Monthly")
   }))
-  # One conservative preset out of the box: with a single preset, default_tier may
-  # be omitted and every admitted caller gets these limits. Estates define more
-  # presets and select per team via the onboarding registry.
+  # One conservative preset: with a single entry default_tier may be omitted.
   default = {
     "standard" = {
       tokens_per_minute = 20000
