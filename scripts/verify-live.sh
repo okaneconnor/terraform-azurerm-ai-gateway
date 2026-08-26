@@ -123,6 +123,10 @@ if [ "$EXPECT_LEGACY" = "1" ]; then
 fi
 
 if [ "$RUN_BURST" = "1" ]; then
+  # The battery's own earlier requests count against the rate window (the
+  # limiter runs before body validation), so burst in a fresh window.
+  printf '  ....  burst: waiting 65s for a fresh rate window\n'
+  sleep 65
   total=$((BURST_LIMIT + 15))
   printf '{"model":"%s","messages":[{"role":"user","content":"hi"}],"max_completion_tokens":1}' "$CHAT_MODEL" > "$WORK/req"
   printf 'url = "%s"\nheader = "Content-Type: application/json"\nheader = "Authorization: Bearer %s"\ndata = "@%s"\n' "$V1" "$TOKEN" "$WORK/req" > "$WORK/cfg"
