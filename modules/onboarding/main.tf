@@ -5,24 +5,34 @@ locals {
   raw = yamldecode(file(var.registry_file))
 
   # try() everywhere: a malformed registry must fail on the rule that names it.
-  team_allowed_keys    = ["team", "owner", "tier", "services"]
-  service_allowed_keys = ["service", "client_id", "principal_object_id"]
+  team_allowed_keys    = ["team", "owner", "tier", "services", "limits", "allowed_models", "content_safety"]
+  service_allowed_keys = ["service", "client_id", "principal_object_id", "limits", "allowed_models", "content_safety"]
 
   teams = [for t in try(local.raw.teams, []) : {
-    team         = try(t.team, null)
-    owner        = try(t.owner, null)
-    tier         = try(t.tier, null)
-    services     = try(t.services, [])
-    unknown_keys = setsubtract(keys(t), local.team_allowed_keys)
+    team           = try(t.team, null)
+    owner          = try(t.owner, null)
+    tier           = try(t.tier, null)
+    services       = try(t.services, [])
+    limits         = try(t.limits, null)
+    allowed_models = try(t.allowed_models, null)
+    content_safety = try(t.content_safety, null)
+    unknown_keys   = setsubtract(keys(t), local.team_allowed_keys)
   }]
 
   services = flatten([
     for t in local.teams : [
       for s in t.services : {
         team                = t.team
+        tier                = t.tier
         service             = try(s.service, null)
         client_id           = try(s.client_id, null)
         principal_object_id = try(s.principal_object_id, null)
+        limits              = try(s.limits, null)
+        allowed_models      = try(s.allowed_models, null)
+        content_safety      = try(s.content_safety, null)
+        team_limits         = t.limits
+        team_models         = t.allowed_models
+        team_cs             = t.content_safety
         key                 = "${coalesce(t.team, "_")}-${coalesce(try(s.service, null), "_")}"
         unknown_keys        = setsubtract(keys(s), local.service_allowed_keys)
       }

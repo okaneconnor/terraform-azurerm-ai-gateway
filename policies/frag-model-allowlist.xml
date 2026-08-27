@@ -1,0 +1,14 @@
+<fragment>
+  <!-- 403 when a registered caller's allowlist excludes the requested canonical
+       model. No allowed-models variable -> no check (caller outside the seam). -->
+  <choose>
+    <when condition="@(context.Variables.ContainsKey(&quot;allowed-models&quot;) &amp;&amp; !((string)context.Variables[&quot;allowed-models&quot;]).Split(',').Contains((string)context.Variables[&quot;requested-model&quot;]))">
+      <return-response>
+        <set-status code="403" reason="Forbidden" />
+        <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+        <set-header name="x-correlation-id" exists-action="override"><value>@(context.RequestId.ToString())</value></set-header>
+        <set-body>{"error":{"message":"The requested model is not on this caller's allowed model list.","type":"permission_error","code":"model_not_permitted"}}</set-body>
+      </return-response>
+    </when>
+  </choose>
+</fragment>

@@ -63,6 +63,31 @@ output "tier_names" {
   value       = keys(var.tiers)
 }
 
+output "tiers" {
+  description = "The tier presets (limits per name) — pass to the onboarding module as tier_limits so the registry seam can seed each team's limits from its tier."
+  value       = var.tiers
+}
+
+output "canonical_models" {
+  description = "Canonical model names the /v1 facade accepts (model_map keys) — pass to the onboarding module so team allowlists validate at plan."
+  value       = keys(local.effective_model_map)
+}
+
+output "rate_limit_renewal_seconds" {
+  description = "Rate-limit window used by the tier presets — pass to the onboarding module so team rate limits share the same window."
+  value       = var.rate_limit_renewal_seconds
+}
+
+output "content_safety_contract" {
+  description = "What the onboarding module needs to render per-team content-safety policy (null when content safety is disabled). Pass as the onboarding module's content_safety input."
+  value = var.content_safety.enabled && local.content_safety_backend_key != null ? {
+    backend_name           = azurerm_api_management_backend.svc[local.content_safety_backend_key].name
+    shield_prompt          = var.content_safety.shield_prompt
+    enforce_on_completions = var.content_safety.enforce_on_completions
+    category_threshold     = var.content_safety.category_threshold
+  } : null
+}
+
 output "demo_clients" {
   description = "Demo client credentials per tier (only when create_demo_clients = true). Map of tier key -> { client_id, client_secret }."
   value = {

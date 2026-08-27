@@ -1,0 +1,6 @@
+<fragment>
+  <!-- Inert seam. The onboarding state owns this fragment's content (limits,
+       model allowlists, flags per registered caller); the gateway creates it
+       once and never plans its value again (ignore_changes). -->
+  <set-variable name="team-overrides-active" value="@(false)" />
+</fragment>

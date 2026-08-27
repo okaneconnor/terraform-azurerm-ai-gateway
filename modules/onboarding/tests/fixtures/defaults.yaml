@@ -1,0 +1,5 @@
+allowed_models: [gpt-test, embed-test]
+content_safety:
+  categories:
+    hate:
+      threshold: 3

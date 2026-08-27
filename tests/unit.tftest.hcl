@@ -90,13 +90,14 @@ run "defaults" {
     error_message = "All AI service accounts must be Entra-only (no API keys)."
   }
 
-  # Default preset renders unconditionally, keyed per caller.
+  # Default preset keyed per caller, guarded so the registry seam can supersede it.
   assert {
     condition = alltrue([
       strcontains(azurerm_api_management_policy_fragment.tier_rate.value, "calls=\"30\""),
-      !strcontains(azurerm_api_management_policy_fragment.tier_rate.value, "<choose>"),
+      strcontains(azurerm_api_management_policy_fragment.tier_rate.value, "!context.Variables.ContainsKey(&quot;team-policied&quot;)"),
+      strcontains(azurerm_api_management_policy_fragment.tier_tokens.value, "!context.Variables.ContainsKey(&quot;team-policied&quot;)"),
     ])
-    error_message = "Rate fragment must render the default preset's limit with no role branching."
+    error_message = "Tier fragments must render the default preset's limits behind the team-policied guard."
   }
 
   assert {
@@ -1371,5 +1372,78 @@ run "member_cleanup_twin_created_per_member" {
   assert {
     condition     = azapi_resource_action.pool_member_cleanup["ptu"].method == "PATCH"
     error_message = "The pool-member cleanup action must PATCH the pool to detach the member."
+  }
+}
+
+run "team_seam_wiring" {
+  command = plan
+
+  # Onboarding-owned fragments are created inert; allowlist enforces 403.
+  assert {
+    condition = alltrue([
+      strcontains(azurerm_api_management_policy_fragment.team_overrides.value, "team-overrides-active"),
+      strcontains(azurerm_api_management_policy_fragment.team_content_safety.value, "team-cs-active"),
+      strcontains(azurerm_api_management_policy_fragment.model_allowlist.value, "model_not_permitted"),
+      azurerm_api_management_policy_fragment.team_overrides.name == "ai-team-overrides",
+      azurerm_api_management_policy_fragment.team_content_safety.name == "ai-team-content-safety",
+      azurerm_api_management_policy_fragment.model_allowlist.name == "ai-model-allowlist",
+    ])
+    error_message = "Seam fragments must exist inert under their contract names."
+  }
+
+  # Platform CS is guarded so a team rendering can replace it.
+  assert {
+    condition     = strcontains(azurerm_api_management_policy_fragment.content_safety["this"].value, "!context.Variables.ContainsKey(&quot;team-cs-policied&quot;)")
+    error_message = "Platform content-safety must skip when a team rendering policied the caller."
+  }
+
+  # Facade chain order: overrides before tier fragments; allowlist after the
+  # model map (unknown -> 404 wins) and before the rewrite; team CS before platform CS.
+  assert {
+    condition = alltrue([
+      strcontains(split("ai-tier-rate", azurerm_api_management_api_policy.facade.xml_content)[0], "ai-team-overrides"),
+      strcontains(split("ai-model-allowlist", azurerm_api_management_api_policy.facade.xml_content)[0], "model_not_found"),
+      strcontains(split("rewrite-uri", azurerm_api_management_api_policy.facade.xml_content)[0], "ai-model-allowlist"),
+      strcontains(split("ai-content-safety", azurerm_api_management_api_policy.facade.xml_content)[0], "ai-team-content-safety"),
+    ])
+    error_message = "Facade policy chain must order the seam correctly."
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(split("ai-tier-rate", azurerm_api_management_api_policy.foundry["this"].xml_content)[0], "ai-team-overrides"),
+      strcontains(split("ai-content-safety", azurerm_api_management_api_policy.foundry["this"].xml_content)[0], "ai-team-content-safety"),
+    ])
+    error_message = "Legacy foundry policy chain must carry the seam too."
+  }
+
+  # The onboarding contract outputs.
+  assert {
+    condition = alltrue([
+      contains(output.canonical_models, "chat"),
+      contains(output.canonical_models, "text-embedding-ada-002"),
+      output.tiers["standard"].rate_limit_calls == 30,
+      output.rate_limit_renewal_seconds == 60,
+      output.content_safety_contract.category_threshold == 4,
+      output.content_safety_contract.shield_prompt == true,
+    ])
+    error_message = "Onboarding contract outputs must mirror the gateway's presets and CS settings."
+  }
+}
+
+run "team_seam_when_content_safety_disabled" {
+  command = plan
+
+  variables {
+    content_safety = { enabled = false }
+  }
+
+  assert {
+    condition = alltrue([
+      strcontains(azurerm_api_management_policy_fragment.team_content_safety.value, "team-cs-active"),
+      !strcontains(azurerm_api_management_api_policy.facade.xml_content, "ai-team-content-safety"),
+      output.content_safety_contract == null,
+    ])
+    error_message = "With CS disabled the seam fragment still exists (inert) but is not included, and the contract output is null."
   }
 }

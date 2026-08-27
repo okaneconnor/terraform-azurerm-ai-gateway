@@ -33,6 +33,9 @@ resource "azurerm_api_management_api_policy" "facade" {
   depends_on = [
     azurerm_api_management_policy_fragment.ip_allow,
     azurerm_api_management_policy_fragment.entra_jwt,
+    azurerm_api_management_policy_fragment.team_overrides,
+    azurerm_api_management_policy_fragment.team_content_safety,
+    azurerm_api_management_policy_fragment.model_allowlist,
     azurerm_api_management_policy_fragment.tier_rate,
     azurerm_api_management_policy_fragment.tier_tokens,
     azurerm_api_management_policy_fragment.backend_mi,

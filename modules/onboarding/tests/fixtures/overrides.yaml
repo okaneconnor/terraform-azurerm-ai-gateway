@@ -1,0 +1,29 @@
+version: v1
+teams:
+  - team: team-alpha
+    owner: alpha-devs
+    tier: standard
+    services:
+      - service: chat
+        client_id: a1b2c3d4-0001-4aaa-9bbb-1234567890ab
+        principal_object_id: a1b2c3d4-0002-4aaa-9bbb-1234567890ab
+  - team: team-beta
+    owner: beta-devs
+    tier: standard
+    limits:
+      tokens_per_minute: 50000
+    allowed_models: [gpt-test]
+    services:
+      - service: chat
+        client_id: a1b2c3d4-0005-4aaa-9bbb-1234567890ab
+        principal_object_id: a1b2c3d4-0006-4aaa-9bbb-1234567890ab
+        limits:
+          rate_limit_calls: 5
+        content_safety:
+          categories:
+            violence:
+              threshold: 2
+      - service: batch
+        client_id: a1b2c3d4-0007-4aaa-9bbb-1234567890ab
+        principal_object_id: a1b2c3d4-0008-4aaa-9bbb-1234567890ab
+        allowed_models: [embed-test]
