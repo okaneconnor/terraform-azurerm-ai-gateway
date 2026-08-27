@@ -210,10 +210,20 @@ resource "terraform_data" "overrides_guard" {
   }
 }
 
-resource "azapi_update_resource" "team_overrides" {
+# Writers are fire-and-forget PUT actions, not tracked resources: APIM
+# re-serialises stored fragment XML (tab indentation), so a tracked body would
+# perpetually diff against the normalised read-back. The rev hash forces a
+# re-fire whenever the rendered content changes.
+resource "terraform_data" "team_overrides_rev" {
+  for_each = local.overrides_enabled ? { this = {} } : {}
+  input    = sha256(local.team_overrides_xml)
+}
+
+resource "azapi_resource_action" "team_overrides_write" {
   for_each    = local.overrides_enabled ? { this = {} } : {}
   type        = "Microsoft.ApiManagement/service/policyFragments@2024-06-01-preview"
   resource_id = "${var.apim_id}/policyFragments/ai-team-overrides"
+  method      = "PUT"
 
   body = {
     properties = {
@@ -222,7 +232,12 @@ resource "azapi_update_resource" "team_overrides" {
     }
   }
 
-  locks      = ["${var.apim_id}/policyFragments/ai-team-overrides"]
+  locks = ["${var.apim_id}/policyFragments/ai-team-overrides"]
+
+  lifecycle {
+    replace_triggered_by = [terraform_data.team_overrides_rev["this"]]
+  }
+
   depends_on = [terraform_data.registry_guard, terraform_data.overrides_guard]
 }
 
@@ -245,10 +260,16 @@ resource "azapi_resource_action" "team_overrides_reset" {
   locks = ["${var.apim_id}/policyFragments/ai-team-overrides"]
 }
 
-resource "azapi_update_resource" "team_content_safety" {
+resource "terraform_data" "team_content_safety_rev" {
+  for_each = local.overrides_enabled ? { this = {} } : {}
+  input    = sha256(local.team_cs_xml)
+}
+
+resource "azapi_resource_action" "team_content_safety_write" {
   for_each    = local.overrides_enabled ? { this = {} } : {}
   type        = "Microsoft.ApiManagement/service/policyFragments@2024-06-01-preview"
   resource_id = "${var.apim_id}/policyFragments/ai-team-content-safety"
+  method      = "PUT"
 
   body = {
     properties = {
@@ -257,7 +278,12 @@ resource "azapi_update_resource" "team_content_safety" {
     }
   }
 
-  locks      = ["${var.apim_id}/policyFragments/ai-team-content-safety"]
+  locks = ["${var.apim_id}/policyFragments/ai-team-content-safety"]
+
+  lifecycle {
+    replace_triggered_by = [terraform_data.team_content_safety_rev["this"]]
+  }
+
   depends_on = [terraform_data.registry_guard, terraform_data.overrides_guard]
 }
 

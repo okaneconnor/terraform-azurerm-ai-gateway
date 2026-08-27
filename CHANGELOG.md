@@ -31,6 +31,37 @@ All notable changes to this module are documented here. The format follows
 
 ### Added
 
+- **Per-team overrides seam** (#39) — the registry becomes the authority on what
+  each registered caller may do, without team changes ever planning the gateway:
+  - The gateway creates two inert policy fragments (`ai-team-overrides`,
+    `ai-team-content-safety`) with `ignore_changes` on their content; the
+    onboarding submodule (given `apim_id` + the new contract outputs `tiers`,
+    `canonical_models`, `rate_limit_renewal_seconds`, `content_safety_contract`)
+    renders per-service policy from the merged registry and writes it via
+    `azapi_update_resource`, with destroy-time twins resetting to inert.
+  - **Merge semantics** — most specific wins, maps per key, lists wholesale:
+    `limits` service → team → the team's tier preset; `allowed_models`
+    service → team → `defaults.yaml` → all canonical models; content-safety
+    categories/thresholds service → team → `defaults.yaml` → platform settings.
+    `shield_prompt` / `enforce_on_completions` stay platform decisions; full
+    per-team opt-out sits behind `allow_team_content_safety_opt_out`
+    (default `false`); `limit_maxima` optionally caps effective limits.
+  - **Model allowlist**: 403 `model_not_permitted` on the facade when a
+    registered caller requests a canonical model outside its list.
+  - **Fail closed**: with the seam active, an admitted caller absent from the
+    registry gets **403 `not_onboarded`** — otherwise not registering would
+    bypass allowlists and content-safety overrides. Inert seam (no registry
+    management) keeps today's tier-preset behaviour exactly.
+  - **`ai-cs-normalize`**: content-safety *category* blocks short-circuit with
+    APIM's native `{"statusCode":403,...}` body and never raise `on-error` (only
+    shield blocks do), so an outbound normaliser rewrites them to the
+    `content_filtered` taxonomy body — closing a gap that predates this change.
+  - Tier/platform-CS fragments gain guards (`team-policied`,
+    `team-cs-policied`) so exactly one authority applies per caller; limit
+    policies inside `<choose>` branches were doc- and live-verified to count
+    per branch. 16 new plan-time validation rules with named-entry messages;
+    `effective_policies` output as the merged audit view.
+
 - **Versioned facade `/v1/chat/completions`** (#38) — the gateway's recommended
   consumer contract, decoupling callers from Azure's surface in both directions:
   - **Model indirection**: callers request canonical names; `var.model_map` maps

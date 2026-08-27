@@ -190,23 +190,23 @@ run "overrides_merge_semantics" {
 
   assert {
     condition = alltrue([
-      strcontains(azapi_update_resource.team_overrides["this"].body.properties.value, "a1b2c3d4-0005-4aaa-9bbb-1234567890ab"),
-      strcontains(azapi_update_resource.team_overrides["this"].body.properties.value, "calls=\"5\""),
-      strcontains(azapi_update_resource.team_overrides["this"].body.properties.value, "tokens-per-minute=\"50000\""),
-      strcontains(azapi_update_resource.team_overrides["this"].body.properties.value, "value=\"embed-test,gpt-test\""),
-      strcontains(azapi_update_resource.team_overrides["this"].body.properties.value, "team-policied"),
-      strcontains(azapi_update_resource.team_overrides["this"].body.properties.value, "not_onboarded"),
+      strcontains(azapi_resource_action.team_overrides_write["this"].body.properties.value, "a1b2c3d4-0005-4aaa-9bbb-1234567890ab"),
+      strcontains(azapi_resource_action.team_overrides_write["this"].body.properties.value, "calls=\"5\""),
+      strcontains(azapi_resource_action.team_overrides_write["this"].body.properties.value, "tokens-per-minute=\"50000\""),
+      strcontains(azapi_resource_action.team_overrides_write["this"].body.properties.value, "value=\"embed-test,gpt-test\""),
+      strcontains(azapi_resource_action.team_overrides_write["this"].body.properties.value, "team-policied"),
+      strcontains(azapi_resource_action.team_overrides_write["this"].body.properties.value, "not_onboarded"),
     ])
     error_message = "Rendered overrides fragment must carry per-service branches, inline numbers and the fail-closed otherwise."
   }
 
   assert {
     condition = alltrue([
-      strcontains(azapi_update_resource.team_content_safety["this"].body.properties.value, "<category name=\"Violence\" threshold=\"2\" />"),
-      strcontains(azapi_update_resource.team_content_safety["this"].body.properties.value, "<category name=\"Hate\" threshold=\"3\" />"),
-      strcontains(azapi_update_resource.team_content_safety["this"].body.properties.value, "backend-id=\"cs-backend\""),
-      strcontains(azapi_update_resource.team_content_safety["this"].body.properties.value, "team-cs-policied"),
-      strcontains(azapi_update_resource.team_content_safety["this"].body.properties.value, "shield-prompt=\"true\""),
+      strcontains(azapi_resource_action.team_content_safety_write["this"].body.properties.value, "<category name=\"Violence\" threshold=\"2\" />"),
+      strcontains(azapi_resource_action.team_content_safety_write["this"].body.properties.value, "<category name=\"Hate\" threshold=\"3\" />"),
+      strcontains(azapi_resource_action.team_content_safety_write["this"].body.properties.value, "backend-id=\"cs-backend\""),
+      strcontains(azapi_resource_action.team_content_safety_write["this"].body.properties.value, "team-cs-policied"),
+      strcontains(azapi_resource_action.team_content_safety_write["this"].body.properties.value, "shield-prompt=\"true\""),
     ])
     error_message = "Rendered CS fragment must carry per-service categories with merged thresholds and platform shield settings."
   }
@@ -235,9 +235,9 @@ run "overrides_registry_without_overrides_uses_tier_presets" {
 
   assert {
     condition = alltrue([
-      strcontains(azapi_update_resource.team_overrides["this"].body.properties.value, "token-quota=\"5000000\""),
-      strcontains(azapi_update_resource.team_overrides["this"].body.properties.value, "token-quota-period=\"Daily\""),
-      strcontains(azapi_update_resource.team_content_safety["this"].body.properties.value, "team-cs-active"),
+      strcontains(azapi_resource_action.team_overrides_write["this"].body.properties.value, "token-quota=\"5000000\""),
+      strcontains(azapi_resource_action.team_overrides_write["this"].body.properties.value, "token-quota-period=\"Daily\""),
+      strcontains(azapi_resource_action.team_content_safety_write["this"].body.properties.value, "team-cs-active"),
     ])
     error_message = "Tier quota must render inline; with no CS overrides the CS fragment stays inert."
   }
@@ -251,8 +251,8 @@ run "overrides_disabled_without_apim_id" {
 
   assert {
     condition = alltrue([
-      length(azapi_update_resource.team_overrides) == 0,
-      length(azapi_update_resource.team_content_safety) == 0,
+      length(azapi_resource_action.team_overrides_write) == 0,
+      length(azapi_resource_action.team_content_safety_write) == 0,
       output.effective_policies == null,
     ])
     error_message = "Without apim_id the module must stay azuread-only (v1 behaviour)."
@@ -273,8 +273,8 @@ run "cs_opt_out_renders_no_screening" {
 
   assert {
     condition = alltrue([
-      strcontains(azapi_update_resource.team_content_safety["this"].body.properties.value, "team-cs-policied"),
-      !strcontains(azapi_update_resource.team_content_safety["this"].body.properties.value, "llm-content-safety"),
+      strcontains(azapi_resource_action.team_content_safety_write["this"].body.properties.value, "team-cs-policied"),
+      !strcontains(azapi_resource_action.team_content_safety_write["this"].body.properties.value, "llm-content-safety"),
     ])
     error_message = "A permitted opt-out must set team-cs-policied and render no llm-content-safety element."
   }

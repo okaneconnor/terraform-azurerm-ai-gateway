@@ -161,6 +161,8 @@ branch on `error.code`, never on prose:
 | 401 | `invalid_token` | Missing/invalid token, or no admission role |
 | 403 | `missing_caller_id` | Token carries neither `azp` nor `appid` |
 | 403 | `content_filtered` | Content safety / Prompt Shield block |
+| 403 | `model_not_permitted` | Model outside the caller's registry allowlist |
+| 403 | `not_onboarded` | Admitted caller with no registry entry (only when the overrides seam is active) |
 | 404 | `model_not_found` | Unknown canonical model name |
 | 429 | `rate_limit_exceeded` | Request rate limit (`Retry-After` set) |
 | 429 | `token_quota_exceeded` | Token limit/quota (`Retry-After` set) |

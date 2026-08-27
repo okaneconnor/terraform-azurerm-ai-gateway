@@ -154,9 +154,9 @@ fi
 out=$(plan_out overrides.yaml "${OV[@]}" "${CS[@]}" -var "defaults_file=$FIXTURES/defaults.yaml")
 if [ $? -ne 0 ]; then
   printf '  FAIL  overrides.yaml: plan errored\n'; failed=$((failed+1))
-elif printf '%s' "$out" | grep -q "9 to add, 0 to change, 0 to destroy" \
-  && printf '%s' "$out" | grep -q 'azapi_update_resource.team_overrides' \
-  && printf '%s' "$out" | grep -q 'azapi_update_resource.team_content_safety' \
+elif printf '%s' "$out" | grep -q "11 to add, 0 to change, 0 to destroy" \
+  && printf '%s' "$out" | grep -q 'azapi_resource_action.team_overrides_write' \
+  && printf '%s' "$out" | grep -q 'azapi_resource_action.team_content_safety_write' \
   && printf '%s' "$out" | grep -q 'calls="5"'; then
   printf '  PASS  overrides.yaml -> plans assignments + both fragments with merged numbers\n'; passed=$((passed+1))
 else
