@@ -37,8 +37,10 @@ All notable changes to this module are documented here. The format follows
     `ai-team-content-safety`) with `ignore_changes` on their content; the
     onboarding submodule (given `apim_id` + the new contract outputs `tiers`,
     `canonical_models`, `rate_limit_renewal_seconds`, `content_safety_contract`)
-    renders per-service policy from the merged registry and writes it via
-    `azapi_update_resource`, with destroy-time twins resetting to inert.
+    renders per-service policy from the merged registry and writes it with
+    fire-and-forget `azapi_resource_action` PUTs (re-fired via a content-hash
+    replace trigger — APIM tab-normalises stored XML, so a tracked body would
+    perpetually diff), with destroy-time twins resetting to inert.
   - **Merge semantics** — most specific wins, maps per key, lists wholesale:
     `limits` service → team → the team's tier preset; `allowed_models`
     service → team → `defaults.yaml` → all canonical models; content-safety
