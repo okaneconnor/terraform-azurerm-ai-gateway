@@ -120,9 +120,16 @@ variable "allow_team_content_safety_opt_out" {
 variable "limit_maxima" {
   description = "Optional guardrail ceilings. When set, every service's EFFECTIVE (post-merge) limits must stay at or below these — a team PR raising a limit past a ceiling fails at plan."
   type = object({
-    rate_limit_calls  = optional(number)
-    tokens_per_minute = optional(number)
-    token_quota       = optional(number)
+    rate_limit_calls   = optional(number)
+    tokens_per_minute  = optional(number)
+    token_quota        = optional(number)
+    token_quota_period = optional(string, "Monthly")
   })
   default = null
+}
+
+variable "model_map" {
+  description = "The gateway module's `model_map` output — canonical name to deployment. Required when a registry or defaults file declares allowed_models, so the allowlist binds on the legacy /openai surface too (it addresses deployments, not canonical names)."
+  type        = map(string)
+  default     = null
 }

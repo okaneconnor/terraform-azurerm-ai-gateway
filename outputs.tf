@@ -68,6 +68,11 @@ output "tiers" {
   value       = var.tiers
 }
 
+output "model_map" {
+  description = "Effective canonical name -> deployment map. Pass to the onboarding module so a team's allowlist can be enforced on the legacy /openai surface, which addresses deployments rather than canonical names."
+  value       = local.effective_model_map
+}
+
 output "canonical_models" {
   description = "Canonical model names the /v1 facade accepts (model_map keys) — pass to the onboarding module so team allowlists validate at plan."
   value       = keys(local.effective_model_map)

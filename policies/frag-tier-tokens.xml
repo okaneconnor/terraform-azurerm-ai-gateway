@@ -2,7 +2,7 @@
   <!-- Default-preset token limit; skipped when the registry seam policied this caller. -->
   <choose>
     <when condition="@(!context.Variables.ContainsKey(&quot;team-policied&quot;))">
-      <llm-token-limit tokens-per-minute="${t.tokens_per_minute}"%{ if t.token_quota != null } token-quota="${t.token_quota}" token-quota-period="${t.token_quota_period}"%{ endif } estimate-prompt-tokens="false" counter-key="@((string)context.Variables[&quot;caller-app-id&quot;])" />
+      <llm-token-limit tokens-per-minute="${t.tokens_per_minute}"%{ if t.token_quota != null } token-quota="${t.token_quota}" token-quota-period="${t.token_quota_period}"%{ endif } estimate-prompt-tokens="false" counter-key="@(&quot;tier|&quot; + (string)context.Variables[&quot;caller-app-id&quot;])" />
     </when>
   </choose>
 </fragment>

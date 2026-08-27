@@ -61,9 +61,20 @@ locals {
     bad = distinct(concat(
       try(tolist(setsubtract(keys(e.cs), local.cs_allowed_keys)), tolist(["<content_safety is not a mapping>"])),
       try(tolist(setsubtract(keys(e.cs.categories), local.cs_cat_keys)), []),
-      try(flatten([for c, v in e.cs.categories : tolist(setsubtract(keys(v), local.cs_cat_allowed))]), []),
+      # Per category, not one try around the lot: a single scalar category would
+      # otherwise swallow the whole entry's unknown-key detection.
+      flatten([for c in local.cs_cat_keys :
+        try(tolist(setsubtract(keys(e.cs.categories[c]), local.cs_cat_allowed)), [])
+      if contains(try(keys(try(e.cs.categories, {})), []), c)]),
     ))
   }]
+
+  # `violence: 2` is the natural shorthand for `violence: { threshold: 2 }` and
+  # would otherwise be accepted and silently ignored (team gets the default).
+  cs_scalar_categories = [for e in local.cs_entries : e.where if !alltrue([
+    for c in local.cs_cat_keys :
+    !contains(try(keys(try(e.cs.categories, {})), []), c) || can(keys(e.cs.categories[c]))
+  ])]
   cs_bad_threshold = [for e in local.cs_entries : e.where if !alltrue([
     for c in local.cs_cat_keys :
     !contains(try(keys(try(e.cs.categories, {})), []), c) || !contains(try(keys(e.cs.categories[c]), []), "threshold") || try(e.cs.categories[c].threshold >= 0 && e.cs.categories[c].threshold <= 7 && floor(e.cs.categories[c].threshold) == e.cs.categories[c].threshold, false)
@@ -73,7 +84,12 @@ locals {
     [for c in local.cs_cat_keys :
     !contains(try(keys(try(e.cs.categories, {})), []), c) || !contains(try(keys(e.cs.categories[c]), []), "enabled") || try(e.cs.categories[c].enabled == true || e.cs.categories[c].enabled == false, false)]
   ))]
-  cs_optout         = [for e in local.cs_entries : e.where if try(e.cs.enabled == false, false)]
+  # Disabling every category screens nothing but shield — the same escape the
+  # top-level flag is gated on, so both spellings answer to the same switch.
+  cs_optout = [for e in local.cs_entries : e.where if anytrue(concat(
+    [try(e.cs.enabled == false, false)],
+    [for c in local.cs_cat_keys : try(e.cs.categories[c].enabled == false, false)],
+  ))]
   needs_cs_contract = local.overrides_enabled && length(local.cs_entries) > 0 && var.content_safety == null
 
   tiers_missing = local.overrides_enabled && var.tier_limits != null ? distinct([
@@ -96,7 +112,8 @@ locals {
       token_quota        = try(coalesce(try(s.limits.token_quota, null), try(s.team_limits.token_quota, null), try(var.tier_limits[s.tier].token_quota, null)), null)
       token_quota_period = try(coalesce(try(s.limits.token_quota_period, null), try(s.team_limits.token_quota_period, null), try(var.tier_limits[s.tier].token_quota_period, null)), "Monthly")
     }
-    allowed_models = try(sort(s.allowed_models != null ? s.allowed_models : (s.team_models != null ? s.team_models : (local.defaults.allowed_models != null ? local.defaults.allowed_models : coalesce(var.canonical_models, [])))), tolist([]))
+    allowlist_explicit = s.allowed_models != null || s.team_models != null || local.defaults.allowed_models != null
+    allowed_models     = try(sort(s.allowed_models != null ? s.allowed_models : (s.team_models != null ? s.team_models : (local.defaults.allowed_models != null ? local.defaults.allowed_models : coalesce(var.canonical_models, [])))), tolist([]))
     cs = {
       overridden = s.content_safety != null || s.team_cs != null || local.defaults.content_safety != null
       enabled    = try(tobool(coalesce(try(s.content_safety.enabled, null), try(s.team_cs.enabled, null), try(local.defaults.content_safety.enabled, null), true)), true)
@@ -110,15 +127,27 @@ locals {
 
   unresolved = [for k, e in local.effective : k if e.limits.rate_limit_calls == null || e.limits.tokens_per_minute == null]
 
+  # Quota ceilings are meaningless without the period: Hourly vs Monthly is a
+  # ~730x difference on the same number. Both sides normalise to tokens/day.
+  period_days = { Hourly = 1 / 24, Daily = 1, Weekly = 7, Monthly = 30, Yearly = 365 }
+  maxima_daily_quota = try(var.limit_maxima.token_quota, null) == null ? null : (
+    var.limit_maxima.token_quota / local.period_days[coalesce(try(var.limit_maxima.token_quota_period, null), "Monthly")]
+  )
+
+  any_explicit_allowlist = anytrue([for k, e in local.effective : e.allowlist_explicit])
+
   over_maxima = var.limit_maxima == null ? [] : [for k, e in local.effective : k if anytrue([
     var.limit_maxima.rate_limit_calls != null && try(e.limits.rate_limit_calls > var.limit_maxima.rate_limit_calls, false),
     var.limit_maxima.tokens_per_minute != null && try(e.limits.tokens_per_minute > var.limit_maxima.tokens_per_minute, false),
-    var.limit_maxima.token_quota != null && try(e.limits.token_quota > var.limit_maxima.token_quota, false),
+    local.maxima_daily_quota != null && try(e.limits.token_quota / local.period_days[e.limits.token_quota_period] > local.maxima_daily_quota, false),
   ])]
 
   # Sorted list + sentinel zeros keep the render total and diff-stable; the
   # guard rejects any registry that could actually reach a sentinel.
   render_services = [for k in sort(keys(local.effective)) : merge(local.effective[k], {
+    allowed_deployments = distinct(sort([
+      for m in local.effective[k].allowed_models : lookup(coalesce(var.model_map, {}), m, m)
+    ]))
     limits = {
       rate_limit_calls   = coalesce(local.effective[k].limits.rate_limit_calls, 0)
       tokens_per_minute  = coalesce(local.effective[k].limits.tokens_per_minute, 0)
@@ -180,6 +209,10 @@ resource "terraform_data" "overrides_guard" {
       error_message = "Unknown key(s) in content_safety: ${join("; ", [for u in local.cs_unknown : "${u.where}: ${join(", ", u.bad)}" if length(u.bad) > 0])}. Allowed: enabled, categories.{${join(",", local.cs_cat_keys)}}.{enabled, threshold}."
     }
     precondition {
+      condition     = length(local.cs_scalar_categories) == 0
+      error_message = "content_safety categories must be mappings, not bare values: ${join(", ", local.cs_scalar_categories)}. Write `violence: { threshold: 2 }`, not `violence: 2` — the shorthand would be accepted and silently ignored, leaving the platform default in force."
+    }
+    precondition {
       condition     = length(local.cs_bad_threshold) == 0
       error_message = "content_safety thresholds must be integers 0-7 (EightSeverityLevels; blocks at >= threshold): ${join(", ", local.cs_bad_threshold)}."
     }
@@ -202,6 +235,14 @@ resource "terraform_data" "overrides_guard" {
     precondition {
       condition     = !local.overrides_enabled || length(local.unresolved) == 0
       error_message = "Could not resolve effective limits for: ${join(", ", local.unresolved)}. Every service needs rate_limit_calls and tokens_per_minute from its overrides or its team's tier preset."
+    }
+    precondition {
+      condition     = !local.overrides_enabled || !local.any_explicit_allowlist || var.model_map != null
+      error_message = "allowed_models is declared but model_map is not set — pass the gateway module's model_map output. Without it the allowlist cannot be enforced on the legacy /openai surface, which addresses deployments rather than canonical names, and a caller could use it to reach a model its allowlist excludes."
+    }
+    precondition {
+      condition     = var.limit_maxima == null || try(var.limit_maxima.token_quota_period, null) == null || contains(local.quota_periods, var.limit_maxima.token_quota_period)
+      error_message = "limit_maxima.token_quota_period must be one of ${join(", ", local.quota_periods)}."
     }
     precondition {
       condition     = length(local.over_maxima) == 0

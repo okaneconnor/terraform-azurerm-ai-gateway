@@ -48,8 +48,12 @@ All notable changes to this module are documented here. The format follows
     `shield_prompt` / `enforce_on_completions` stay platform decisions; full
     per-team opt-out sits behind `allow_team_content_safety_opt_out`
     (default `false`); `limit_maxima` optionally caps effective limits.
-  - **Model allowlist**: 403 `model_not_permitted` on the facade when a
-    registered caller requests a canonical model outside its list.
+  - **Model allowlist**: 403 `model_not_permitted` when a registered caller asks
+    for something outside its list — enforced on BOTH surfaces. The facade names
+    canonical models; the legacy `/openai` path addresses deployments, so the
+    registry renders the mapped deployment set too (hence the new `model_map`
+    input) and neither surface can be used to dodge the other. A team that
+    declares no allowlist gets no check, exactly as before.
   - **Fail closed**: with the seam active, an admitted caller absent from the
     registry gets **403 `not_onboarded`** — otherwise not registering would
     bypass allowlists and content-safety overrides. Inert seam (no registry
@@ -61,6 +65,19 @@ All notable changes to this module are documented here. The format follows
     taxonomy matched only the former, so category blocks leaked APIM's native
     `{"statusCode":403,...}` body; it now matches both and returns
     `403 content_filtered` either way. This gap predates this change.
+  - **Team and tier limits use separate counter-key namespaces** (`team|` / `tier|`).
+    APIM keeps one counter per counter-key across every scope, and the passthrough
+    `ai_services` APIs carry the tier fragment without the team fragment — so a
+    shared key let passthrough traffic spend a team's LLM rate budget (and vice
+    versa) whenever the two limits differed.
+  - `allow_team_content_safety_opt_out` also gates per-category
+    `enabled: false`, not just the top-level flag — disabling every category
+    screened nothing but Prompt Shield and previously slipped past the switch.
+  - `limit_maxima` gained `token_quota_period`, and quota ceilings are compared
+    as tokens-per-day: without that, a team could keep the platform's quota
+    number and change the period from Monthly to Hourly for ~730x the budget.
+  - A bare `violence: 2` (the natural shorthand for `{ threshold: 2 }`) is now
+    rejected by name instead of being silently accepted and ignored.
   - Tier/platform-CS fragments gain guards (`team-policied`,
     `team-cs-policied`) so exactly one authority applies per caller; limit
     policies inside `<choose>` branches were doc- and live-verified to count

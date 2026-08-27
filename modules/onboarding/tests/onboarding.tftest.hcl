@@ -151,6 +151,7 @@ run "overrides_merge_semantics" {
     apim_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/mock-rg/providers/Microsoft.ApiManagement/service/mock-apim"
     tier_limits      = { standard = { tokens_per_minute = 20000, rate_limit_calls = 30 }, premium = { tokens_per_minute = 150000, rate_limit_calls = 120, token_quota = 5000000, token_quota_period = "Daily" } }
     canonical_models = ["gpt-test", "embed-test", "extra-model"]
+    model_map        = { gpt-test = "dep-gpt", embed-test = "dep-embed", extra-model = "dep-extra" }
     content_safety   = { backend_name = "cs-backend" }
   }
 
@@ -444,5 +445,97 @@ run "rejects_limits_above_maxima" {
     canonical_models = ["gpt-test"]
     limit_maxima     = { tokens_per_minute = 4000 }
   }
+  expect_failures = [terraform_data.overrides_guard]
+}
+
+# ---- Regressions from the pre-PR adversarial review ----
+
+run "allowlist_renders_deployments_for_the_legacy_surface" {
+  command = plan
+
+  variables {
+    registry_file    = "tests/fixtures/overrides.yaml"
+    apim_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/mock-rg/providers/Microsoft.ApiManagement/service/mock-apim"
+    tier_limits      = { standard = { tokens_per_minute = 20000, rate_limit_calls = 30 } }
+    canonical_models = ["gpt-test", "embed-test", "alias-test"]
+    model_map        = { gpt-test = "dep-gpt", embed-test = "dep-embed", alias-test = "dep-gpt" }
+    content_safety   = { backend_name = "cs-backend" }
+  }
+
+  # The legacy path addresses deployments, so an allowlist that only named
+  # canonical models could be dodged there.
+  assert {
+    condition = alltrue([
+      strcontains(azapi_resource_action.team_overrides_write["this"].body.properties.value, "name=\"allowed-deployments\" value=\"dep-gpt\""),
+      strcontains(azapi_resource_action.team_overrides_write["this"].body.properties.value, "name=\"allowed-models\" value=\"gpt-test\""),
+    ])
+    error_message = "An explicit allowlist must render both the canonical list and its mapped deployments."
+  }
+
+  # A team with no explicit allowlist keeps pre-seam behaviour: no check at all.
+  assert {
+    condition = !strcontains(
+      split("</when>", split("a1b2c3d4-0001-4aaa-9bbb-1234567890ab", azapi_resource_action.team_overrides_write["this"].body.properties.value)[1])[0],
+      "allowed-models"
+    )
+    error_message = "A team that declares no allowlist must not get an allowlist variable."
+  }
+
+  # Team and tier limits must not share a rate-limit counter.
+  assert {
+    condition     = strcontains(azapi_resource_action.team_overrides_write["this"].body.properties.value, "team|")
+    error_message = "Team limits must use their own counter-key namespace, or passthrough traffic spends the team's budget."
+  }
+}
+
+run "rejects_allowlist_without_model_map" {
+  command = plan
+  variables {
+    registry_file    = "tests/fixtures/overrides.yaml"
+    apim_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/mock-rg/providers/Microsoft.ApiManagement/service/mock-apim"
+    tier_limits      = { standard = { tokens_per_minute = 20000, rate_limit_calls = 30 } }
+    canonical_models = ["gpt-test", "embed-test"]
+    content_safety   = { backend_name = "cs-backend" }
+  }
+  expect_failures = [terraform_data.overrides_guard]
+}
+
+run "rejects_scalar_category_shorthand" {
+  command = plan
+  variables {
+    registry_file    = "tests/fixtures/bad-cs-scalar-category.yaml"
+    apim_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/mock-rg/providers/Microsoft.ApiManagement/service/mock-apim"
+    tier_limits      = { standard = { tokens_per_minute = 20000, rate_limit_calls = 30 } }
+    canonical_models = ["gpt-test"]
+    model_map        = { gpt-test = "dep-gpt" }
+    content_safety   = { backend_name = "cs-backend" }
+  }
+  expect_failures = [terraform_data.overrides_guard]
+}
+
+run "rejects_per_category_optout_when_not_allowed" {
+  command = plan
+  variables {
+    registry_file    = "tests/fixtures/cs-category-optout.yaml"
+    apim_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/mock-rg/providers/Microsoft.ApiManagement/service/mock-apim"
+    tier_limits      = { standard = { tokens_per_minute = 20000, rate_limit_calls = 30 } }
+    canonical_models = ["gpt-test"]
+    model_map        = { gpt-test = "dep-gpt" }
+    content_safety   = { backend_name = "cs-backend" }
+  }
+  expect_failures = [terraform_data.overrides_guard]
+}
+
+run "quota_ceiling_is_period_aware" {
+  command = plan
+  variables {
+    registry_file    = "tests/fixtures/quota-hourly.yaml"
+    apim_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/mock-rg/providers/Microsoft.ApiManagement/service/mock-apim"
+    tier_limits      = { standard = { tokens_per_minute = 20000, rate_limit_calls = 30 } }
+    canonical_models = ["gpt-test"]
+    model_map        = { gpt-test = "dep-gpt" }
+    limit_maxima     = { token_quota = 5000000, token_quota_period = "Monthly" }
+  }
+  # 1M tokens/hour is ~24x the 5M/month ceiling — the raw number alone is under it.
   expect_failures = [terraform_data.overrides_guard]
 }

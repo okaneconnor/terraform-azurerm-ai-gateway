@@ -6,6 +6,7 @@
     <include-fragment fragment-id="ai-team-overrides" />
     <include-fragment fragment-id="ai-tier-rate" />
     <include-fragment fragment-id="ai-tier-tokens" />
+    <include-fragment fragment-id="ai-model-allowlist" />
     <!-- backend-mi must precede content-safety: the llm-content-safety call rides
          on the Authorization header, which this fragment swaps to the MSI token. -->
     <include-fragment fragment-id="ai-backend-managed-identity" />

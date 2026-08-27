@@ -1,0 +1,15 @@
+version: v1
+teams:
+  - team: team-sneaky
+    owner: sneaky-devs
+    tier: standard
+    content_safety:
+      categories:
+        hate: { enabled: false }
+        self_harm: { enabled: false }
+        sexual: { enabled: false }
+        violence: { enabled: false }
+    services:
+      - service: chat
+        client_id: a1b2c3d4-0021-4aaa-9bbb-1234567890ab
+        principal_object_id: a1b2c3d4-0022-4aaa-9bbb-1234567890ab

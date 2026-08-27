@@ -1424,8 +1424,20 @@ run "team_seam_wiring" {
     condition = alltrue([
       strcontains(split("ai-tier-rate", azurerm_api_management_api_policy.foundry["this"].xml_content)[0], "ai-team-overrides"),
       strcontains(split("ai-content-safety", azurerm_api_management_api_policy.foundry["this"].xml_content)[0], "ai-team-content-safety"),
+      strcontains(azurerm_api_management_api_policy.foundry["this"].xml_content, "ai-model-allowlist"),
     ])
-    error_message = "Legacy foundry policy chain must carry the seam too."
+    error_message = "Legacy foundry policy chain must carry the seam AND the allowlist — it is enabled by default, and without the allowlist a team can reach a deployment its list excludes."
+  }
+
+  # Team and tier limits must not share a counter: ai-aiservice includes the tier
+  # fragment WITHOUT the team fragment, so the guard cannot separate them there.
+  assert {
+    condition = alltrue([
+      strcontains(azurerm_api_management_policy_fragment.tier_rate.value, "tier|"),
+      strcontains(azurerm_api_management_policy_fragment.tier_tokens.value, "tier|"),
+      strcontains(azurerm_api_management_policy_fragment.model_allowlist.value, "allowed-deployments"),
+    ])
+    error_message = "Tier limits need their own counter-key namespace, and the allowlist must cover the deployment-addressed surface."
   }
 
   # The onboarding contract outputs.

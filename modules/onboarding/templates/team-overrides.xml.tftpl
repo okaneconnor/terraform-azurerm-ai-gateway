@@ -8,9 +8,12 @@
 %{ for s in services ~}
     <when condition="@((string)context.Variables[&quot;caller-app-id&quot;] == &quot;${s.client_id}&quot;)">
       <set-variable name="team-policied" value="@(true)" />
+%{ if s.allowlist_explicit ~}
       <set-variable name="allowed-models" value="${join(",", s.allowed_models)}" />
-      <rate-limit-by-key calls="${s.limits.rate_limit_calls}" renewal-period="${renewal}" counter-key="@((string)context.Variables[&quot;caller-app-id&quot;])" />
-      <llm-token-limit tokens-per-minute="${s.limits.tokens_per_minute}"%{ if s.limits.token_quota != null } token-quota="${s.limits.token_quota}" token-quota-period="${s.limits.token_quota_period}"%{ endif } estimate-prompt-tokens="false" counter-key="@((string)context.Variables[&quot;caller-app-id&quot;])" />
+      <set-variable name="allowed-deployments" value="${join(",", s.allowed_deployments)}" />
+%{ endif ~}
+      <rate-limit-by-key calls="${s.limits.rate_limit_calls}" renewal-period="${renewal}" counter-key="@(&quot;team|&quot; + (string)context.Variables[&quot;caller-app-id&quot;])" />
+      <llm-token-limit tokens-per-minute="${s.limits.tokens_per_minute}"%{ if s.limits.token_quota != null } token-quota="${s.limits.token_quota}" token-quota-period="${s.limits.token_quota_period}"%{ endif } estimate-prompt-tokens="false" counter-key="@(&quot;team|&quot; + (string)context.Variables[&quot;caller-app-id&quot;])" />
     </when>
 %{ endfor ~}
     <otherwise>
