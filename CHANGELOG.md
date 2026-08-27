@@ -54,10 +54,13 @@ All notable changes to this module are documented here. The format follows
     registry gets **403 `not_onboarded`** — otherwise not registering would
     bypass allowlists and content-safety overrides. Inert seam (no registry
     management) keeps today's tier-preset behaviour exactly.
-  - **`ai-cs-normalize`**: content-safety *category* blocks short-circuit with
-    APIM's native `{"statusCode":403,...}` body and never raise `on-error` (only
-    shield blocks do), so an outbound normaliser rewrites them to the
-    `content_filtered` taxonomy body — closing a gap that predates this change.
+  - **Content-safety category blocks now return the taxonomy body.** Live probing
+    showed the two failure shapes differ: *shield* blocks raise `on-error` with
+    `Source=llm-content-safety`, but *category* blocks raise it with
+    `Source=request-forwarder` and `Reason=ContentSafetyPolicyViolated`. The
+    taxonomy matched only the former, so category blocks leaked APIM's native
+    `{"statusCode":403,...}` body; it now matches both and returns
+    `403 content_filtered` either way. This gap predates this change.
   - Tier/platform-CS fragments gain guards (`team-policied`,
     `team-cs-policied`) so exactly one authority applies per caller; limit
     policies inside `<choose>` branches were doc- and live-verified to count

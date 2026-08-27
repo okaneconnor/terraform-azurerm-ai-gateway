@@ -40,7 +40,6 @@ resource "azurerm_api_management_api_policy" "facade" {
     azurerm_api_management_policy_fragment.tier_tokens,
     azurerm_api_management_policy_fragment.backend_mi,
     azurerm_api_management_policy_fragment.content_safety,
-    azurerm_api_management_policy_fragment.cs_normalize,
     azurerm_api_management_policy_fragment.token_metric,
     azurerm_api_management_policy_fragment.error_taxonomy,
     azapi_resource.foundry_pool,

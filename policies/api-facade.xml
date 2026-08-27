@@ -66,9 +66,6 @@
   <backend><base /></backend>
   <outbound>
     <base />
-%{ if content_safety_enabled ~}
-    <include-fragment fragment-id="ai-cs-normalize" />
-%{ endif ~}
 %{ if semantic_cache_enabled ~}
     <llm-semantic-cache-store duration="${cache_duration}" />
 %{ endif ~}

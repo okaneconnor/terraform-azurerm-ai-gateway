@@ -90,7 +90,15 @@ seam. The seam covers the LLM surfaces (`/v1` facade and the legacy `/openai`
 path); passthrough `ai_services` APIs keep the platform tier limits.
 
 Apply ordering: the gateway must be applied (fragments exist) before this
-module's first apply with `apim_id` set.
+module's first apply with `apim_id` set. Policy changes reach the gateway
+eventually-consistently — a newly onboarded caller can briefly still get
+`403 not_onboarded` for a few tens of seconds after the apply returns.
+
+Testing note: the gateway's optional `create_demo_clients` (off by default)
+admits its demo clients directly, so under an active seam they read as
+unregistered (`403 not_onboarded`), and adding one to the registry fails on
+Entra's duplicate role assignment. Onboard a real service identity to smoke-test
+the seam.
 
 ### Overrides in the registry
 

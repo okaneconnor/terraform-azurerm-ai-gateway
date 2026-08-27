@@ -31,7 +31,9 @@
         <set-body>{"error":{"message":"Token limit or quota exceeded for this caller.","type":"rate_limit_error","code":"token_quota_exceeded"}}</set-body>
       </return-response>
     </when>
-    <when condition="@(context.LastError.Source == &quot;llm-content-safety&quot;)">
+    <!-- Shield blocks surface as Source=llm-content-safety; category blocks as
+         Source=request-forwarder with Reason=ContentSafetyPolicyViolated. -->
+    <when condition="@(context.LastError.Source == &quot;llm-content-safety&quot; || context.LastError.Reason == &quot;ContentSafetyPolicyViolated&quot;)">
       <return-response>
         <set-status code="403" reason="Forbidden" />
         <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>

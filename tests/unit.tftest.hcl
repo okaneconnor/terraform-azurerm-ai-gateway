@@ -1397,15 +1397,15 @@ run "team_seam_wiring" {
     error_message = "Platform content-safety must skip when a team rendering policied the caller."
   }
 
-  # Category blocks short-circuit with APIM's native 403 body (no on-error);
-  # the outbound normaliser rewrites it to the taxonomy.
+  # Live-verified: shield blocks raise Source=llm-content-safety, category blocks
+  # raise Source=request-forwarder + Reason=ContentSafetyPolicyViolated. Matching
+  # only the Source leaks APIM's native body for category blocks.
   assert {
     condition = alltrue([
-      strcontains(azurerm_api_management_policy_fragment.cs_normalize["this"].value, "content_filtered"),
-      strcontains(split("<outbound>", azurerm_api_management_api_policy.facade.xml_content)[1], "ai-cs-normalize"),
-      strcontains(split("<outbound>", azurerm_api_management_api_policy.foundry["this"].xml_content)[1], "ai-cs-normalize"),
+      strcontains(azurerm_api_management_policy_fragment.error_taxonomy.value, "ContentSafetyPolicyViolated"),
+      strcontains(azurerm_api_management_policy_fragment.error_taxonomy.value, "content_filtered"),
     ])
-    error_message = "The CS normaliser must exist and run in both outbound chains."
+    error_message = "The taxonomy must map BOTH content-safety failure shapes to content_filtered."
   }
 
   # Facade chain order: overrides before tier fragments; allowlist after the
@@ -1453,10 +1453,8 @@ run "team_seam_when_content_safety_disabled" {
     condition = alltrue([
       strcontains(azurerm_api_management_policy_fragment.team_content_safety.value, "team-cs-active"),
       !strcontains(azurerm_api_management_api_policy.facade.xml_content, "ai-team-content-safety"),
-      !strcontains(azurerm_api_management_api_policy.facade.xml_content, "ai-cs-normalize"),
-      length(azurerm_api_management_policy_fragment.cs_normalize) == 0,
       output.content_safety_contract == null,
     ])
-    error_message = "With CS disabled the seam fragment still exists (inert) but is not included, and the normaliser is absent."
+    error_message = "With CS disabled the seam fragment still exists (inert) but is not included."
   }
 }

@@ -52,14 +52,6 @@ resource "azurerm_api_management_policy_fragment" "content_safety" {
   }
 }
 
-resource "azurerm_api_management_policy_fragment" "cs_normalize" {
-  for_each          = var.content_safety.enabled ? { this = {} } : {}
-  api_management_id = azurerm_api_management.apim.id
-  name              = "ai-cs-normalize"
-  format            = "xml"
-  value             = file("${path.module}/policies/frag-cs-normalize.xml")
-}
-
 resource "azurerm_api_management_policy_fragment" "token_metric" {
   api_management_id = azurerm_api_management.apim.id
   name              = "ai-token-metrics"
