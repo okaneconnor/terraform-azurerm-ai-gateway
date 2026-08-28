@@ -126,6 +126,11 @@ variable "limit_maxima" {
     token_quota_period = optional(string, "Monthly")
   })
   default = null
+
+  validation {
+    condition     = var.limit_maxima == null ? true : contains(["Hourly", "Daily", "Weekly", "Monthly", "Yearly"], coalesce(var.limit_maxima.token_quota_period, "Monthly"))
+    error_message = "limit_maxima.token_quota_period must be one of Hourly, Daily, Weekly, Monthly, Yearly."
+  }
 }
 
 variable "model_map" {

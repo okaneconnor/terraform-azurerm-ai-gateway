@@ -1,6 +1,6 @@
 module "ai_gateway" {
 
-  source  = "okaneconnor/ai-gateway/azurerm//modules/onboarding"
+  source  = "okaneconnor/ai-gateway/azurerm"
   version = "~> 2.0"
 
   location        = "uksouth"

@@ -539,3 +539,30 @@ run "quota_ceiling_is_period_aware" {
   # 1M tokens/hour is ~24x the 5M/month ceiling — the raw number alone is under it.
   expect_failures = [terraform_data.overrides_guard]
 }
+
+run "rejects_non_mapping_categories_container" {
+  command = plan
+  variables {
+    registry_file    = "tests/fixtures/bad-cs-categories-list.yaml"
+    apim_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/mock-rg/providers/Microsoft.ApiManagement/service/mock-apim"
+    tier_limits      = { standard = { tokens_per_minute = 20000, rate_limit_calls = 30 } }
+    canonical_models = ["gpt-test"]
+    model_map        = { gpt-test = "dep-gpt" }
+    content_safety   = { backend_name = "cs-backend" }
+  }
+  expect_failures = [terraform_data.overrides_guard]
+}
+
+run "rejects_invalid_maxima_period_by_name" {
+  command = plan
+  variables {
+    registry_file    = "tests/fixtures/valid.yaml"
+    apim_id          = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/mock-rg/providers/Microsoft.ApiManagement/service/mock-apim"
+    tier_limits      = { standard = { tokens_per_minute = 20000, rate_limit_calls = 30 }, premium = { tokens_per_minute = 150000, rate_limit_calls = 120 } }
+    canonical_models = ["gpt-test"]
+    model_map        = { gpt-test = "dep-gpt" }
+    # A quota IS set, so the old precondition was unreachable here.
+    limit_maxima = { token_quota = 1000, token_quota_period = "Fortnightly" }
+  }
+  expect_failures = [var.limit_maxima]
+}

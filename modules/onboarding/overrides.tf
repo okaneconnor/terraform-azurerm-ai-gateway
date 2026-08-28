@@ -60,7 +60,8 @@ locals {
     where = e.where
     bad = distinct(concat(
       try(tolist(setsubtract(keys(e.cs), local.cs_allowed_keys)), tolist(["<content_safety is not a mapping>"])),
-      try(tolist(setsubtract(keys(e.cs.categories), local.cs_cat_keys)), []),
+      try(tolist(setsubtract(keys(e.cs.categories), local.cs_cat_keys)),
+      contains(try(keys(e.cs), []), "categories") ? tolist(["<categories is not a mapping>"]) : []),
       # Per category, not one try around the lot: a single scalar category would
       # otherwise swallow the whole entry's unknown-key detection.
       flatten([for c in local.cs_cat_keys :
@@ -131,7 +132,7 @@ locals {
   # ~730x difference on the same number. Both sides normalise to tokens/day.
   period_days = { Hourly = 1 / 24, Daily = 1, Weekly = 7, Monthly = 30, Yearly = 365 }
   maxima_daily_quota = try(var.limit_maxima.token_quota, null) == null ? null : (
-    var.limit_maxima.token_quota / local.period_days[coalesce(try(var.limit_maxima.token_quota_period, null), "Monthly")]
+    var.limit_maxima.token_quota / lookup(local.period_days, coalesce(try(var.limit_maxima.token_quota_period, null), "Monthly"), 30)
   )
 
   any_explicit_allowlist = anytrue([for k, e in local.effective : e.allowlist_explicit])
@@ -239,11 +240,6 @@ resource "terraform_data" "overrides_guard" {
     precondition {
       condition     = !local.overrides_enabled || !local.any_explicit_allowlist || var.model_map != null
       error_message = "allowed_models is declared but model_map is not set — pass the gateway module's model_map output. Without it the allowlist cannot be enforced on the legacy /openai surface, which addresses deployments rather than canonical names, and a caller could use it to reach a model its allowlist excludes."
-    }
-    precondition {
-      # Ternary, not ||: 1.9.x evaluates every operand even when the first is true.
-      condition     = var.limit_maxima == null ? true : contains(local.quota_periods, coalesce(var.limit_maxima.token_quota_period, "Monthly"))
-      error_message = "limit_maxima.token_quota_period must be one of ${join(", ", local.quota_periods)}."
     }
     precondition {
       condition     = length(local.over_maxima) == 0
