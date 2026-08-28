@@ -1,4 +1,5 @@
 module "ai_gateway" {
+  #checkov:skip=CKV_TF_1:Registry source pinned by version constraint; commit hashes apply to git sources.
 
   source  = "okaneconnor/ai-gateway/azurerm"
   version = "~> 2.0"

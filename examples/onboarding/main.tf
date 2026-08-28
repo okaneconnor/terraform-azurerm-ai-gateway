@@ -1,4 +1,5 @@
 module "onboarding" {
+  #checkov:skip=CKV_TF_1:Registry source pinned by version constraint; commit hashes apply to git sources.
   source  = "okaneconnor/ai-gateway/azurerm//modules/onboarding"
   version = "~> 2.0"
 

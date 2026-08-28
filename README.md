@@ -234,10 +234,10 @@ understand them before adopting it for production:
 
 | Name | Version |
 |------|---------|
-| azapi | 2.12.0 |
-| azuread | 3.9.0 |
-| azurerm | 4.81.0 |
-| random | 3.9.0 |
+| azapi | ~> 2.0 |
+| azuread | ~> 3.0 |
+| azurerm | ~> 4.74 |
+| random | ~> 3.6 |
 
 ## Modules
 
