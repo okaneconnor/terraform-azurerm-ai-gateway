@@ -1,7 +1,14 @@
 # Two-state layout: the gateway lives in its own state (see examples/complete);
 # this configuration is the ONLY thing a team-onboarding pipeline applies.
-# It reads the gateway's outputs — never its credentials — and applying it can
-# never plan the gateway.
+# It takes a handful of the gateway's outputs as inputs — never its credentials,
+# and applying it can never plan the gateway.
+#
+# The values below are plain variables so this example stays backend-agnostic and
+# so the onboarding pipeline reads nothing it does not need. Wire them however
+# your estate passes values between states (CI variables, a shared tfvars file,
+# or a terraform_remote_state data source if you already share state access —
+# note that reading the gateway's state exposes ALL of its outputs, including
+# sensitive ones, to whatever runs this).
 
 terraform {
   required_version = ">= 1.9.0"
@@ -22,39 +29,36 @@ terraform {
 provider "azuread" {}
 provider "azapi" {}
 
-data "terraform_remote_state" "gateway" {
-  backend = "azurerm"
+# Admission — all that is needed to grant access.
+variable "gateway_app_object_id" { type = string }
+variable "gateway_app_role_id" { type = string }
+variable "tier_names" { type = list(string) }
 
-  config = {
-    resource_group_name  = var.gateway_state.resource_group_name
-    storage_account_name = var.gateway_state.storage_account_name
-    container_name       = var.gateway_state.container_name
-    key                  = var.gateway_state.key
-  }
+# The overrides seam. Set apim_id to null to run admission-only, in which case
+# every admitted caller gets the gateway's default tier preset (v1 behaviour).
+variable "apim_id" {
+  type    = string
+  default = null
 }
-
-variable "gateway_state" {
-  description = "Where the gateway's Terraform state lives — the only coupling between the two states."
-  type = object({
-    resource_group_name  = string
-    storage_account_name = string
-    container_name       = string
-    key                  = string
-  })
+variable "tier_limits" {
+  type    = map(any)
+  default = null
 }
-
-variable "enforce_team_policy" {
-  description = <<-EOT
-    false: onboarding grants admission only, and every admitted caller gets the
-    gateway's default tier preset (v1 behaviour).
-
-    true: the registry also becomes the authority on each caller's limits, model
-    allowlist and content-safety settings. Note this is FAIL CLOSED — once on, a
-    caller holding the admission role but absent from teams.yaml is refused with
-    403 not_onboarded, so register every existing caller before enabling it.
-  EOT
-  type        = bool
-  default     = true
+variable "canonical_models" {
+  type    = list(string)
+  default = null
+}
+variable "model_map" {
+  type    = map(string)
+  default = null
+}
+variable "rate_limit_renewal_seconds" {
+  type    = number
+  default = 60
+}
+variable "content_safety" {
+  type    = any
+  default = null
 }
 
 module "onboarding" {
@@ -62,18 +66,20 @@ module "onboarding" {
 
   registry_file = "${path.module}/teams.yaml"
 
-  gateway_app_object_id = data.terraform_remote_state.gateway.outputs.gateway_app_object_id
-  gateway_app_role_id   = data.terraform_remote_state.gateway.outputs.gateway_app_role_id
-  tier_names            = data.terraform_remote_state.gateway.outputs.tier_names
+  gateway_app_object_id = var.gateway_app_object_id
+  gateway_app_role_id   = var.gateway_app_role_id
+  tier_names            = var.tier_names
 
-  # Everything below activates the overrides seam. Drop the whole block (or set
-  # enforce_team_policy = false) to run admission-only.
-  apim_id                    = var.enforce_team_policy ? data.terraform_remote_state.gateway.outputs.apim_id : null
-  tier_limits                = data.terraform_remote_state.gateway.outputs.tiers
-  canonical_models           = data.terraform_remote_state.gateway.outputs.canonical_models
-  model_map                  = data.terraform_remote_state.gateway.outputs.model_map
-  rate_limit_renewal_seconds = data.terraform_remote_state.gateway.outputs.rate_limit_renewal_seconds
-  content_safety             = data.terraform_remote_state.gateway.outputs.content_safety_contract
+  # Everything below activates the overrides seam. Leave apim_id null to run
+  # admission-only. NOTE this is FAIL CLOSED — once on, a caller holding the
+  # admission role but absent from teams.yaml is refused with 403 not_onboarded,
+  # so register every existing caller before enabling it.
+  apim_id                    = var.apim_id
+  tier_limits                = var.tier_limits
+  canonical_models           = var.canonical_models
+  model_map                  = var.model_map
+  rate_limit_renewal_seconds = var.rate_limit_renewal_seconds
+  content_safety             = var.content_safety
   defaults_file              = "${path.module}/defaults.yaml"
 
   # Ceilings no team PR can exceed, whatever it writes in teams.yaml.

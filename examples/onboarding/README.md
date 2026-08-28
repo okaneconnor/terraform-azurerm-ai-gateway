@@ -13,41 +13,42 @@ split, and it is worth asserting in CI.
 
 ## Wiring
 
-The onboarding state reads the gateway's outputs from its remote state. The
-gateway must therefore export them — in your gateway configuration:
+The onboarding state takes the gateway's outputs as inputs. Pass them however
+your estate moves values between states — CI variables, a shared tfvars file, or
+a `terraform_remote_state` data source if you already share state access. Prefer
+passing the values: reading the gateway's state hands whatever runs onboarding
+*every* gateway output, including the sensitive ones, when it needs these eight.
+
+Admission only:
 
 ```hcl
-output "gateway_app_object_id" { value = module.ai_gateway.gateway_app_object_id }
-output "gateway_app_role_id"   { value = module.ai_gateway.gateway_app_role_id }
-output "tier_names"            { value = module.ai_gateway.tier_names }
-
-# Only needed for the overrides seam:
-output "apim_id"                    { value = module.ai_gateway.apim_id }
-output "tiers"                      { value = module.ai_gateway.tiers }
-output "canonical_models"           { value = module.ai_gateway.canonical_models }
-output "model_map"                  { value = module.ai_gateway.model_map }
-output "rate_limit_renewal_seconds" { value = module.ai_gateway.rate_limit_renewal_seconds }
-output "content_safety_contract"    { value = module.ai_gateway.content_safety_contract }
+gateway_app_object_id = <gateway output>
+gateway_app_role_id   = <gateway output>
+tier_names            = <gateway output>
 ```
 
-Then apply this directory with the location of that state:
+Plus these to activate the overrides seam:
+
+```hcl
+apim_id                    = <gateway output>
+tiers                      -> tier_limits
+canonical_models           = <gateway output>
+model_map                  = <gateway output>
+rate_limit_renewal_seconds = <gateway output>
+content_safety_contract    -> content_safety
+```
 
 ```bash
-terraform apply -var 'gateway_state={
-  resource_group_name  = "rg-tfstate"
-  storage_account_name = "sttfstate"
-  container_name       = "tfstate"
-  key                  = "ai-gateway.tfstate"
-}'
+terraform apply -var-file=gateway-outputs.tfvars
 ```
 
 ## The two modes
 
-`enforce_team_policy = false` grants **admission only**: every admitted caller
-gets the gateway's default tier preset. This is the original behaviour and needs
-only the `azuread` provider.
+Leaving `apim_id` unset grants **admission only**: every admitted caller gets the
+gateway's default tier preset. This is the original behaviour and needs only the
+`azuread` provider.
 
-`enforce_team_policy = true` (the default here) additionally makes the registry
+Setting `apim_id` (with the other seam inputs) additionally makes the registry
 the authority on limits, model allowlists and content-safety settings, rendered
 into gateway-owned policy fragments.
 
