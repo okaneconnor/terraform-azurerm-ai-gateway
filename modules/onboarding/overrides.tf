@@ -241,7 +241,8 @@ resource "terraform_data" "overrides_guard" {
       error_message = "allowed_models is declared but model_map is not set — pass the gateway module's model_map output. Without it the allowlist cannot be enforced on the legacy /openai surface, which addresses deployments rather than canonical names, and a caller could use it to reach a model its allowlist excludes."
     }
     precondition {
-      condition     = var.limit_maxima == null || try(var.limit_maxima.token_quota_period, null) == null || contains(local.quota_periods, var.limit_maxima.token_quota_period)
+      # Ternary, not ||: 1.9.x evaluates every operand even when the first is true.
+      condition     = var.limit_maxima == null ? true : contains(local.quota_periods, coalesce(var.limit_maxima.token_quota_period, "Monthly"))
       error_message = "limit_maxima.token_quota_period must be one of ${join(", ", local.quota_periods)}."
     }
     precondition {
