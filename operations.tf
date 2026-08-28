@@ -1,10 +1,3 @@
-locals {
-  svc_wildcard_ops = {
-    for pair in setproduct(keys(var.ai_services), ["GET", "POST"]) :
-    "${pair[0]}|${pair[1]}" => { api = pair[0], method = pair[1] }
-  }
-}
-
 resource "azurerm_api_management_api_operation" "svc_wildcard" {
   for_each = local.svc_wildcard_ops
 

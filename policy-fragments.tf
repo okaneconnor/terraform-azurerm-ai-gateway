@@ -1,12 +1,3 @@
-locals {
-  ip_allow_ranges = [
-    for c in var.allowed_client_cidrs : {
-      from = cidrhost(c, 0)
-      to   = cidrhost(c, -1)
-    }
-  ]
-}
-
 resource "azurerm_api_management_policy_fragment" "ip_allow" {
   api_management_id = azurerm_api_management.apim.id
   name              = "ai-ip-allow"

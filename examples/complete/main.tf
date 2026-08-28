@@ -1,16 +1,13 @@
 module "ai_gateway" {
-  # Local path for this in-repo example. When consuming the published module use:
-  #   source  = "okaneconnor/ai-gateway/azurerm"
-  #   version = "~> 1.0"
-  source = "../.."
+
+  source  = "okaneconnor/ai-gateway/azurerm//modules/onboarding"
+  version = "~> 2.0"
 
   location        = "uksouth"
   publisher_name  = "Contoso AI Platform"
   publisher_email = "ai-platform@contoso.com"
 
-  # REQUIRED — the module ships no default model (Azure deprecates versions over
-  # time). Pin current models + versions you hold quota for. gpt-5.4-mini is only
-  # offered on GlobalStandard, so the residency allowlist below must permit it.
+  # REQUIRED — the module ships no default model
   model_deployments = {
     "gpt-5.4-mini" = {
       model_name    = "gpt-5.4-mini"
@@ -27,8 +24,8 @@ module "ai_gateway" {
   }
 
   deployment_sku_policy = { allowed_sku_names = ["Standard", "GlobalStandard"] }
-  semantic_cache = { embeddings_deployment = "text-embedding-3-small" }
-  create_demo_clients = true
+  semantic_cache        = { embeddings_deployment = "text-embedding-3-small" }
+  create_demo_clients   = true
 
   tags = { environment = "example", workload = "ai-gateway" }
 

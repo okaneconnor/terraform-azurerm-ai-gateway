@@ -1,11 +1,3 @@
-locals {
-  create_action_group = var.alerts.enabled && var.alerts.existing_action_group_id == null
-  action_group_id = var.alerts.existing_action_group_id != null ? var.alerts.existing_action_group_id : (
-    var.alerts.enabled ? azurerm_monitor_action_group.main["this"].id : null
-  )
-  action_group_ids = local.action_group_id != null ? [local.action_group_id] : []
-}
-
 resource "azurerm_monitor_action_group" "main" {
   for_each            = local.create_action_group ? { this = {} } : {}
   name                = "ag-${local.name_base}"
