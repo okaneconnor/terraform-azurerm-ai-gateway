@@ -6,6 +6,11 @@ in-place update**, so read this before running `apply`.
 
 ## What changed
 
+v2 carries **two** breaking changes. Naming is the visible one; admission is the
+one that will stop your callers working if you miss it.
+
+### 1. Naming (every resource)
+
 | v1 | v2 |
 | --- | --- |
 | `aigw-apim-x7k2p` (random 5-char suffix) | `apim-aigw-uks` (deterministic) |
@@ -17,6 +22,49 @@ in-place update**, so read this before running `apply`.
 Three abbreviations were corrected to match the CAF table: Foundry accounts
 `fdry` → **`aif`**, private endpoints `pe` → **`pep`**, Managed Redis
 `redis` → **`amr`**.
+
+### 2. Admission is one app role; tiers are limit presets
+
+v1 gave every tier its own Entra app role, and a caller's tier came from the role
+it held. v2 defines **one** role — `var.admission_app_role`, default
+`AI.Gateway.Standard` — which answers only "may this identity reach the gateway".
+Limits now come from config, not from the token.
+
+```diff
+ tiers = {
+   standard = {
+-    app_role          = "AI.Gateway.Standard"
+-    display_name      = "Standard"
+     tokens_per_minute = 20000
+     rate_limit_calls  = 30
+   }
+ }
++default_tier = "standard"
+```
+
+`app_role` and `display_name` are removed from `var.tiers`. `var.default_tier`
+selects which preset applies; it may be omitted only when `var.tiers` has exactly
+one entry — the module never guesses between several.
+
+**This breaks existing callers until you re-grant them.** Their tokens carry a
+per-tier role that no longer exists on the gateway app, so they will get
+`401 invalid_token`. Before upgrading, or immediately after:
+
+```bash
+# for every existing caller
+az rest --method POST \
+  --url "https://graph.microsoft.com/v1.0/servicePrincipals/$GATEWAY_SP_OBJECT_ID/appRoleAssignedTo" \
+  --headers "Content-Type=application/json" \
+  --body "{\"principalId\":\"$CALLER_SP_OBJECT_ID\",\"resourceId\":\"$GATEWAY_SP_OBJECT_ID\",\"appRoleId\":\"$ADMISSION_ROLE_ID\"}"
+```
+
+`$GATEWAY_SP_OBJECT_ID` and `$ADMISSION_ROLE_ID` are the `gateway_app_object_id`
+and `gateway_app_role_id` outputs. If you run several tiers today, note that every
+admitted caller now gets `default_tier` until you differentiate them — see the
+optional seam below.
+
+Bringing your own gateway app? It must define a role whose value matches
+`admission_app_role`, or the plan fails with a named error.
 
 ## Choose your path
 
@@ -113,6 +161,24 @@ Only reasonable for sandbox or pre-production.
 `name_suffix` is removed. If you set it purely for determinism, you no longer need
 it — v2 is deterministic by default. If you set it to disambiguate two deployments,
 use `instance`.
+
+## Optional: per-team config via the registry
+
+v2 adds [`modules/onboarding`](../modules/onboarding/README.md) — a reviewed YAML
+registry, in its own Terraform state, that can also become the authority on each
+team's limits, model allowlist and content-safety thresholds.
+
+It is **off unless you set `apim_id`**. Leave it unset and every admitted caller
+gets `default_tier`, exactly as described above.
+
+Turning it on is **fail closed**: once active, a caller holding the admission role
+but absent from the registry is refused with `403 not_onboarded`. Register every
+existing caller *before* you enable it. Policy also reaches the gateway
+eventually-consistently, so a newly onboarded caller may briefly still see
+`403 not_onboarded` for a few tens of seconds after the apply returns.
+
+Two new error codes come with it: `model_not_permitted` and `not_onboarded`.
+Branch on `error.code` as usual.
 
 ## After upgrading
 
