@@ -1,11 +1,47 @@
-# The team registry: one reviewed file, one team per entry. See
-# modules/onboarding/README.md for the schema and validation rules.
+# The team registry. Teams onboard, change and offboard by pull request against
+# this one file; the PR diff is the audit trail and platform review is the gate.
+#
+# A service is one Entra identity (app registration or managed identity). Get its
+# ids with:
+#   az ad sp show --id <app-client-id> --query "{client_id:appId,principal_object_id:id}"
+# For a managed identity, client_id is its clientId and principal_object_id its principalId.
 version: v1
+
 teams:
-  - team: team-alpha
-    owner: alpha-devs
+  # Inherits everything: its tier's limits, the default allowlist from
+  # defaults.yaml, and the platform's content-safety settings.
+  - team: payments
+    owner: payments-platform
     tier: standard
     services:
-      - service: chat
-        client_id: 00000000-0000-0000-0000-000000000000 # replace: the app/client id your service authenticates as
-        principal_object_id: 00000000-0000-0000-0000-000000000000 # replace: that identity's SP OBJECT id
+      - service: checkout-assistant
+        client_id: 7d3f21a8-4c19-4e07-9b52-0a6d18c4e931
+        principal_object_id: b81c04d6-7a35-4f2e-8c19-53de71a0f4b2
+
+  # Overrides at team level apply to every service the team owns.
+  - team: research
+    owner: research-guild
+    tier: standard
+    limits:
+      # Other limit keys still come from the tier preset.
+      tokens_per_minute: 50000
+    allowed_models:
+      # Lists replace wholesale — this team gets ONLY this model.
+      - gpt-5-mini
+    services:
+      - service: summariser
+        client_id: 2f8a19c4-6b70-4d53-a1e8-9c47b2035fd6
+        principal_object_id: c93e57b1-08fa-4d26-b7c4-1e6805af2d73
+
+      # Service-level settings beat team-level ones, key by key. Everything this
+      # service does not restate is inherited from the team above.
+      - service: batch-classifier
+        client_id: 5c14e0d9-3a86-4b71-9f02-6d38ca517e84
+        principal_object_id: e0725bd3-91c6-4a58-8b3f-24709fe6c1a5
+        limits:
+          rate_limit_calls: 5
+        content_safety:
+          categories:
+            # Stricter than the platform for this one service; its sibling
+            # summariser is unaffected. Lower = less tolerant (0-7).
+            violence: { threshold: 2 }

@@ -1,0 +1,13 @@
+version: v1
+teams:
+  - team: team-alpha
+    owner: alpha-devs
+    tier: standard
+    services:
+      - service: chat
+        client_id: a1b2c3d4-0001-4aaa-9bbb-1234567890ab
+        principal_object_id: a1b2c3d4-0002-4aaa-9bbb-1234567890ab
+        content_safety:
+          categories:
+            violence:
+              threshold: 9

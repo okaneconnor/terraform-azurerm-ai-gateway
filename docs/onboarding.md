@@ -12,8 +12,11 @@ Admission and configuration are deliberately separate concerns:
   needed once per identity.
 - **Consumption config** — limits and quotas come from the gateway's tier presets
   (`var.tiers` / `var.default_tier`), not from the role. Admitted callers get the
-  default preset; per-team tiers and overrides are managed as gateway
-  configuration, so granting access never means editing limits, and vice versa.
+  default preset — until the registry's **overrides seam** is activated, at which
+  point each registered team gets its tier preset plus its own reviewed
+  overrides (limits, model allowlist, content-safety thresholds) and
+  unregistered callers are refused with `403 not_onboarded`. See
+  [`modules/onboarding`](../modules/onboarding/README.md#the-overrides-seam).
 
 ## Prerequisites
 

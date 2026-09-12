@@ -1,12 +1,3 @@
-locals {
-  ip_allow_ranges = [
-    for c in var.allowed_client_cidrs : {
-      from = cidrhost(c, 0)
-      to   = cidrhost(c, -1)
-    }
-  ]
-}
-
 resource "azurerm_api_management_policy_fragment" "ip_allow" {
   api_management_id = azurerm_api_management.apim.id
   name              = "ai-ip-allow"
@@ -64,6 +55,44 @@ resource "azurerm_api_management_policy_fragment" "error_taxonomy" {
   name              = "ai-error-taxonomy"
   format            = "xml"
   value             = file("${path.module}/policies/frag-error-taxonomy.xml")
+}
+
+# Onboarding-owned seams: created inert, content written by the onboarding
+# state (azapi), never planned again here. Registry changes must not touch
+# gateway state — that property is the point of the split.
+resource "azurerm_api_management_policy_fragment" "team_overrides" {
+  api_management_id = azurerm_api_management.apim.id
+  name              = "ai-team-overrides"
+  format            = "xml"
+  value             = file("${path.module}/modules/onboarding/policies/frag-team-overrides-inert.xml")
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+
+  depends_on = [azurerm_api_management_policy_fragment.entra_jwt]
+}
+
+resource "azurerm_api_management_policy_fragment" "team_content_safety" {
+  api_management_id = azurerm_api_management.apim.id
+  name              = "ai-team-content-safety"
+  format            = "xml"
+  value             = file("${path.module}/modules/onboarding/policies/frag-team-cs-inert.xml")
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+
+  depends_on = [azurerm_api_management_policy_fragment.entra_jwt]
+}
+
+resource "azurerm_api_management_policy_fragment" "model_allowlist" {
+  api_management_id = azurerm_api_management.apim.id
+  name              = "ai-model-allowlist"
+  format            = "xml"
+  value             = file("${path.module}/policies/frag-model-allowlist.xml")
+
+  depends_on = [azurerm_api_management_policy_fragment.team_overrides]
 }
 
 resource "azurerm_api_management_policy_fragment" "tier_rate" {

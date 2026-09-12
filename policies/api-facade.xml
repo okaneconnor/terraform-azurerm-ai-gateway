@@ -3,6 +3,9 @@
     <base />
     <include-fragment fragment-id="ai-ip-allow" />
     <include-fragment fragment-id="ai-auth-entra-jwt" />
+    <!-- Registry seam first: registered callers get their own limits inline and
+         set team-policied, which the tier fragments honour by skipping. -->
+    <include-fragment fragment-id="ai-team-overrides" />
     <include-fragment fragment-id="ai-tier-rate" />
     <include-fragment fragment-id="ai-tier-tokens" />
     <set-variable name="requested-model" value="@{
@@ -41,12 +44,15 @@
         </return-response>
       </when>
     </choose>
+    <include-fragment fragment-id="ai-model-allowlist" />
     <rewrite-uri template="@($"/deployments/{(string)context.Variables[&quot;deployment&quot;]}/chat/completions?api-version=${api_version}")" copy-unmatched-params="false" />
     <!-- backend-mi must precede content-safety: the llm-content-safety call rides
          on the Authorization header, which this fragment swaps to the MSI token. -->
     <include-fragment fragment-id="ai-backend-managed-identity" />
 %{ if content_safety_enabled ~}
-    <!-- Before the cache: cache hits must not bypass Prompt Shield. -->
+    <!-- Before the cache: cache hits must not bypass Prompt Shield. Team CS
+         first — it sets team-cs-policied, which platform CS honours by skipping. -->
+    <include-fragment fragment-id="ai-team-content-safety" />
     <include-fragment fragment-id="ai-content-safety" />
 %{ endif ~}
 %{ if semantic_cache_enabled ~}

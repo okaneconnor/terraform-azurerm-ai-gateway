@@ -1,0 +1,24 @@
+<fragment>
+  <!-- Rendered from the team registry by the onboarding state. A branch here
+       replaces the platform content-safety fragment for its caller
+       (team-cs-policied). shield_prompt and enforce-on-completions stay the
+       platform's decision; teams tune categories and thresholds only. -->
+  <choose>
+%{ for s in services ~}
+    <when condition="@((string)context.Variables[&quot;caller-app-id&quot;] == &quot;${s.client_id}&quot;)">
+      <set-variable name="team-cs-policied" value="@(true)" />
+%{ if s.cs.enabled ~}
+      <llm-content-safety backend-id="${backend}" shield-prompt="${shield}" enforce-on-completions="${enforce}">
+%{ if length(s.cs_enabled_categories) > 0 ~}
+        <categories output-type="EightSeverityLevels">
+%{ for c in s.cs_enabled_categories ~}
+          <category name="${c.name}" threshold="${c.threshold}" />
+%{ endfor ~}
+        </categories>
+%{ endif ~}
+      </llm-content-safety>
+%{ endif ~}
+    </when>
+%{ endfor ~}
+  </choose>
+</fragment>

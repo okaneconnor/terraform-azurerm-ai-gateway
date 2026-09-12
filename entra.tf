@@ -35,12 +35,6 @@ data "azuread_service_principal" "gateway_byo" {
   client_id = var.existing_gateway_app.client_id
 }
 
-locals {
-  gateway_sp_object_id = var.existing_gateway_app != null ? data.azuread_service_principal.gateway_byo["this"].object_id : azuread_service_principal.gateway["this"].object_id
-  # Read the minted uuid, not the SP's app_role_ids map (stale during upgrades).
-  gateway_admission_role_id = var.existing_gateway_app != null ? lookup(data.azuread_service_principal.gateway_byo["this"].app_role_ids, var.admission_app_role, null) : random_uuid.role["this"].result
-}
-
 check "byo_admission_role" {
   assert {
     # Ternary, not ||: 1.9.x evaluates `true || unknown` as unknown.

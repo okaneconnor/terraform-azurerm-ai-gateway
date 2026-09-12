@@ -1,0 +1,33 @@
+<fragment>
+  <!-- 403 when a registered caller's allowlist excludes what it asked for.
+       Two surfaces, two vocabularies: the facade names canonical models
+       (requested-model), the legacy path addresses deployments in the URL. The
+       registry renders both lists, so neither surface can be used to dodge the
+       other. Variable absent -> no check (caller outside the seam, or a team
+       with no explicit allowlist). -->
+  <choose>
+    <when condition="@(context.Variables.ContainsKey(&quot;requested-model&quot;) &amp;&amp; context.Variables.ContainsKey(&quot;allowed-models&quot;) &amp;&amp; !((string)context.Variables[&quot;allowed-models&quot;]).Split(',').Contains((string)context.Variables[&quot;requested-model&quot;]))">
+      <return-response>
+        <set-status code="403" reason="Forbidden" />
+        <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+        <set-header name="x-correlation-id" exists-action="override"><value>@(context.RequestId.ToString())</value></set-header>
+        <set-body>{"error":{"message":"The requested model is not on this caller's allowed model list.","type":"permission_error","code":"model_not_permitted"}}</set-body>
+      </return-response>
+    </when>
+    <when condition="@{
+        if (context.Variables.ContainsKey(&quot;requested-model&quot;)) { return false; }
+        if (!context.Variables.ContainsKey(&quot;allowed-deployments&quot;)) { return false; }
+        var segments = context.Request.OriginalUrl.Path.Split('/');
+        var i = System.Array.IndexOf(segments, &quot;deployments&quot;);
+        if (i &lt; 0 || i + 1 &gt;= segments.Length) { return false; }
+        return !((string)context.Variables[&quot;allowed-deployments&quot;]).Split(',').Contains(segments[i + 1]);
+    }">
+      <return-response>
+        <set-status code="403" reason="Forbidden" />
+        <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+        <set-header name="x-correlation-id" exists-action="override"><value>@(context.RequestId.ToString())</value></set-header>
+        <set-body>{"error":{"message":"The requested deployment is not on this caller's allowed model list.","type":"permission_error","code":"model_not_permitted"}}</set-body>
+      </return-response>
+    </when>
+  </choose>
+</fragment>

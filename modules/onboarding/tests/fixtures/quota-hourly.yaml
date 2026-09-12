@@ -1,0 +1,12 @@
+version: v1
+teams:
+  - team: team-greedy
+    owner: greedy-devs
+    tier: standard
+    limits:
+      token_quota: 1000000
+      token_quota_period: Hourly
+    services:
+      - service: chat
+        client_id: a1b2c3d4-0031-4aaa-9bbb-1234567890ab
+        principal_object_id: a1b2c3d4-0032-4aaa-9bbb-1234567890ab

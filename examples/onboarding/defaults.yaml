@@ -1,0 +1,20 @@
+# Platform defaults, authored by the platform team — not by the teams being
+# onboarded. Anything a team does not override falls through to here, and
+# anything absent here falls through to the gateway's own settings.
+#
+# Only the two keys below are allowed; limits are NOT set here, because a team's
+# limits come from the tier preset it selects.
+
+# Default model allowlist. Every name must be a canonical model the gateway
+# serves (its model_map keys). Omit this key entirely to let teams use every
+# model the gateway publishes.
+allowed_models:
+  - gpt-5-mini
+  - gpt-4o
+
+# Default content-safety tuning. Categories not listed keep the gateway's own
+# threshold. Prompt Shield is a platform guarantee and is not tunable here.
+content_safety:
+  categories:
+    hate: { threshold: 3 }
+    self_harm: { threshold: 3 }

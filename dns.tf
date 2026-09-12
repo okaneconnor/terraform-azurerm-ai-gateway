@@ -1,13 +1,3 @@
-locals {
-  private_dns_zones = {
-    cognitive  = "privatelink.cognitiveservices.azure.com"
-    openai     = "privatelink.openai.azure.com"
-    aiservices = "privatelink.services.ai.azure.com"
-    keyvault   = "privatelink.vaultcore.azure.net"
-    redis      = "privatelink.redis.azure.net"
-  }
-}
-
 resource "azurerm_private_dns_zone" "zone" {
   for_each            = local.create_dns_zones ? local.private_dns_zones : {}
   name                = each.value

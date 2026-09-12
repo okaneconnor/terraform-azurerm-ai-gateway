@@ -29,8 +29,6 @@ locals {
   }
   region_short = lookup(local.region_short_map, var.location, var.location)
 
-  # CAF naming: <type>-<name_prefix>[-<environment>][-<region>][-<instance>].
-  # The ONLY place names are constructed. Deterministic — see docs/naming.md.
   name_base = join("-", compact([
     var.name_prefix,
     var.environment,
@@ -69,6 +67,14 @@ locals {
   apim_subnet_id = var.existing_network != null ? var.existing_network.apim_subnet_id : azurerm_subnet.apim["this"].id
   pe_subnet_id   = var.existing_network != null ? var.existing_network.pe_subnet_id : azurerm_subnet.pe["this"].id
 
+  private_dns_zones = {
+    cognitive  = "privatelink.cognitiveservices.azure.com"
+    openai     = "privatelink.openai.azure.com"
+    aiservices = "privatelink.services.ai.azure.com"
+    keyvault   = "privatelink.vaultcore.azure.net"
+    redis      = "privatelink.redis.azure.net"
+  }
+
   create_dns_zones = length(var.existing_private_dns_zone_ids) == 0
   private_dns_zone_ids = local.create_dns_zones ? {
     for k in keys(local.private_dns_zones) : k => azurerm_private_dns_zone.zone[k].id
@@ -80,10 +86,32 @@ locals {
   app_insights_id                = var.existing_application_insights != null ? var.existing_application_insights.id : azurerm_application_insights.ai["this"].id
   app_insights_connection_string = var.existing_application_insights != null ? var.existing_application_insights.connection_string : azurerm_application_insights.ai["this"].connection_string
 
+  create_action_group = var.alerts.enabled && var.alerts.existing_action_group_id == null
+  action_group_id = var.alerts.existing_action_group_id != null ? var.alerts.existing_action_group_id : (
+    var.alerts.enabled ? azurerm_monitor_action_group.main["this"].id : null
+  )
+  action_group_ids = local.action_group_id != null ? [local.action_group_id] : []
+
+  budget_action_groups = distinct(compact(concat(
+    var.budget.action_group_id != null ? [var.budget.action_group_id] : [],
+    local.action_group_ids,
+  )))
+
   gateway_client_id = var.existing_gateway_app != null ? var.existing_gateway_app.client_id : azuread_application.gateway["this"].client_id
+
+  gateway_sp_object_id = var.existing_gateway_app != null ? data.azuread_service_principal.gateway_byo["this"].object_id : azuread_service_principal.gateway["this"].object_id
+
+  gateway_admission_role_id = var.existing_gateway_app != null ? lookup(data.azuread_service_principal.gateway_byo["this"].app_role_ids, var.admission_app_role, null) : random_uuid.role["this"].result
 
   default_tier_key  = var.default_tier != null ? var.default_tier : keys(var.tiers)[0]
   default_tier_spec = var.tiers[local.default_tier_key]
+
+  ip_allow_ranges = [
+    for c in var.allowed_client_cidrs : {
+      from = cidrhost(c, 0)
+      to   = cidrhost(c, -1)
+    }
+  ]
 
   content_safety_keys        = [for k, v in var.ai_services : k if v.kind == "ContentSafety"]
   content_safety_backend_key = length(local.content_safety_keys) > 0 ? local.content_safety_keys[0] : null
@@ -126,6 +154,49 @@ locals {
 
   member_account_name = { for k, m in local.created_members : k =>
     substr(lower("aif-${k}-${local.name_base}"), 0, 63)
+  }
+
+  private_endpoints = merge(
+    {
+      for k, v in var.ai_services : k => {
+        resource_id = azurerm_cognitive_account.svc[k].id
+        subresource = "account"
+        dns_zones   = ["cognitive", "aiservices"]
+      }
+    },
+    {
+      foundry = {
+        resource_id = azurerm_cognitive_account.foundry.id
+        subresource = "account"
+        dns_zones   = ["cognitive", "openai", "aiservices"]
+      }
+    },
+    {
+      for k, m in local.created_members : "member-${k}" => {
+        resource_id = azurerm_cognitive_account.member[k].id
+        subresource = "account"
+        dns_zones   = ["cognitive", "openai", "aiservices"]
+      }
+    },
+    var.key_vault.enabled ? {
+      kv = {
+        resource_id = azurerm_key_vault.main["this"].id
+        subresource = "vault"
+        dns_zones   = ["keyvault"]
+      }
+    } : {},
+    var.semantic_cache.enabled ? {
+      redis = {
+        resource_id = azurerm_managed_redis.cache["this"].id
+        subresource = "redisEnterprise"
+        dns_zones   = ["redis"]
+      }
+    } : {}
+  )
+
+  svc_wildcard_ops = {
+    for pair in setproduct(keys(var.ai_services), ["GET", "POST"]) :
+    "${pair[0]}|${pair[1]}" => { api = pair[0], method = pair[1] }
   }
 }
 

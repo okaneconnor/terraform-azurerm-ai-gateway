@@ -10,6 +10,19 @@ output "onboarded_services" {
   } }
 }
 
+output "effective_policies" {
+  description = "The merged (service > team > defaults > tier preset / platform) policy each registered service actually gets — the audit view of the overrides seam. Null unless apim_id is set. content_safety.overridden = false means the platform fragment applies unchanged."
+  value = local.overrides_enabled ? { for k, e in local.effective : k => {
+    team           = e.team
+    service        = e.service
+    tier           = e.tier
+    client_id      = e.client_id
+    limits         = e.limits
+    allowed_models = e.allowed_models
+    content_safety = e.cs
+  } } : null
+}
+
 output "teams" {
   description = "The normalised registry teams (team, owner, tier, service count) — for dashboards and downstream config."
   value = [for t in local.teams : {

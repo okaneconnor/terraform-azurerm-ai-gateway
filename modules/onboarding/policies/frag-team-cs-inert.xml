@@ -1,0 +1,6 @@
+<fragment>
+  <!-- Inert seam. The onboarding state owns this fragment's content (per-team
+       content-safety renderings); the gateway creates it once and never plans
+       its value again (ignore_changes). -->
+  <set-variable name="team-cs-active" value="@(false)" />
+</fragment>

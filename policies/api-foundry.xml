@@ -3,8 +3,10 @@
     <base />
     <include-fragment fragment-id="ai-ip-allow" />
     <include-fragment fragment-id="ai-auth-entra-jwt" />
+    <include-fragment fragment-id="ai-team-overrides" />
     <include-fragment fragment-id="ai-tier-rate" />
     <include-fragment fragment-id="ai-tier-tokens" />
+    <include-fragment fragment-id="ai-model-allowlist" />
     <!-- backend-mi must precede content-safety: the llm-content-safety call rides
          on the Authorization header, which this fragment swaps to the MSI token. -->
     <include-fragment fragment-id="ai-backend-managed-identity" />
@@ -22,7 +24,9 @@
       <when condition="@(!context.Request.OriginalUrl.Path.EndsWith(&quot;/embeddings&quot;))">
 %{ if content_safety_enabled ~}
         <!-- Screens EVERY prompt — deliberately placed before the semantic cache
-             so cache hits cannot bypass Prompt Shield. -->
+             so cache hits cannot bypass Prompt Shield. Team CS first — it sets
+             team-cs-policied, which platform CS honours by skipping. -->
+        <include-fragment fragment-id="ai-team-content-safety" />
         <include-fragment fragment-id="ai-content-safety" />
 %{ endif ~}
 %{ if semantic_cache_enabled ~}

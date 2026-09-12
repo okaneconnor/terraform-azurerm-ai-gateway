@@ -1,10 +1,3 @@
-locals {
-  budget_action_groups = distinct(compact(concat(
-    var.budget.action_group_id != null ? [var.budget.action_group_id] : [],
-    local.action_group_ids,
-  )))
-}
-
 resource "azurerm_consumption_budget_resource_group" "budget" {
   for_each          = var.budget.enabled ? { this = {} } : {}
   name              = "budget-${local.name_base}"

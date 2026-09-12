@@ -279,6 +279,9 @@ No modules.
 | [azurerm_api_management_policy_fragment.entra_jwt](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_policy_fragment) | resource |
 | [azurerm_api_management_policy_fragment.error_taxonomy](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_policy_fragment) | resource |
 | [azurerm_api_management_policy_fragment.ip_allow](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_policy_fragment) | resource |
+| [azurerm_api_management_policy_fragment.model_allowlist](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_policy_fragment) | resource |
+| [azurerm_api_management_policy_fragment.team_content_safety](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_policy_fragment) | resource |
+| [azurerm_api_management_policy_fragment.team_overrides](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_policy_fragment) | resource |
 | [azurerm_api_management_policy_fragment.tier_rate](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_policy_fragment) | resource |
 | [azurerm_api_management_policy_fragment.tier_tokens](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_policy_fragment) | resource |
 | [azurerm_api_management_policy_fragment.token_metric](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/api_management_policy_fragment) | resource |
@@ -396,6 +399,8 @@ No modules.
 | application\_insights\_connection\_string | Application Insights connection string for consumer apps that want to correlate telemetry. |
 | application\_insights\_id | Application Insights resource ID (module-created or bring-your-own). |
 | backend\_pool\_members | Backend pool members and their priority/weight/kind (includes the module's Foundry account as 'primary'). |
+| canonical\_models | Canonical model names the /v1 facade accepts (model\_map keys) — pass to the onboarding module so team allowlists validate at plan. |
+| content\_safety\_contract | What the onboarding module needs to render per-team content-safety policy (null when content safety is disabled). Pass as the onboarding module's content\_safety input. |
 | demo\_clients | Demo client credentials per tier (only when create\_demo\_clients = true). Map of tier key -> { client\_id, client\_secret }. |
 | foundry\_account\_name | Foundry (AIServices) account name. |
 | foundry\_endpoint | Foundry account endpoint (private; resolvable only inside the VNet). |
@@ -408,12 +413,15 @@ No modules.
 | log\_analytics\_workspace\_guid | Log Analytics customer/workspace GUID for KQL queries (ApiManagementGatewayLogs / ApiManagementGatewayLlmLog). Null when bringing your own workspace. |
 | log\_analytics\_workspace\_resource\_id | Log Analytics workspace ARM resource ID (module-created or bring-your-own). |
 | model\_deployment\_names | Deployment names exposed at /openai/deployments/<name>/... on the gateway. |
+| model\_map | Effective canonical name -> deployment map. Pass to the onboarding module so a team's allowlist can be enforced on the legacy /openai surface, which addresses deployments rather than canonical names. |
 | pe\_subnet\_id | Subnet holding the private endpoints. |
 | private\_dns\_zone\_ids | Map of private DNS zone role -> resource ID (module-created or bring-your-own). Link these from a hub if you run hub-and-spoke DNS. |
+| rate\_limit\_renewal\_seconds | Rate-limit window used by the tier presets — pass to the onboarding module so team rate limits share the same window. |
 | resource\_group\_id | Resource group resource ID. |
 | resource\_group\_name | Resource group containing the gateway stack. |
 | tenant\_id | Entra tenant the gateway app lives in. |
 | tier\_names | Names of the configured tier presets — the values an onboarding registry may reference as a team's tier. |
+| tiers | The tier presets (limits per name) — pass to the onboarding module as tier\_limits so the registry seam can seed each team's limits from its tier. |
 | vnet\_id | VNet the gateway is injected into (module-created or bring-your-own) — use for peering. |
 <!-- END_TF_DOCS -->
 

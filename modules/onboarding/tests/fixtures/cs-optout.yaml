@@ -1,0 +1,11 @@
+version: v1
+teams:
+  - team: team-quiet
+    owner: quiet-devs
+    tier: standard
+    content_safety:
+      enabled: false
+    services:
+      - service: batch
+        client_id: a1b2c3d4-0011-4aaa-9bbb-1234567890ab
+        principal_object_id: a1b2c3d4-0012-4aaa-9bbb-1234567890ab

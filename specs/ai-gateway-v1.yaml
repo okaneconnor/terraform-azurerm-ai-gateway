@@ -212,6 +212,18 @@ paths:
                       message: "Request blocked by content safety policy."
                       type: permission_error
                       code: content_filtered
+                model_not_permitted:
+                  value:
+                    error:
+                      message: "The requested model is not on this caller's allowed model list."
+                      type: permission_error
+                      code: model_not_permitted
+                not_onboarded:
+                  value:
+                    error:
+                      message: "This caller holds the admission role but has no entry in the gateway's team registry."
+                      type: permission_error
+                      code: not_onboarded
         "404":
           description: Unknown canonical model name.
           content:

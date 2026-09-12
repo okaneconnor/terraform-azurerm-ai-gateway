@@ -31,6 +31,59 @@ All notable changes to this module are documented here. The format follows
 
 ### Added
 
+- **Per-team overrides seam** (#39) — the registry becomes the authority on what
+  each registered caller may do, without team changes ever planning the gateway:
+  - The gateway creates two inert policy fragments (`ai-team-overrides`,
+    `ai-team-content-safety`) with `ignore_changes` on their content; the
+    onboarding submodule (given `apim_id` + the new contract outputs `tiers`,
+    `canonical_models`, `rate_limit_renewal_seconds`, `content_safety_contract`)
+    renders per-service policy from the merged registry and writes it with
+    fire-and-forget `azapi_resource_action` PUTs (re-fired via a content-hash
+    replace trigger — APIM tab-normalises stored XML, so a tracked body would
+    perpetually diff), with destroy-time twins resetting to inert.
+  - **Merge semantics** — most specific wins, maps per key, lists wholesale:
+    `limits` service → team → the team's tier preset; `allowed_models`
+    service → team → `defaults.yaml` → all canonical models; content-safety
+    categories/thresholds service → team → `defaults.yaml` → platform settings.
+    `shield_prompt` / `enforce_on_completions` stay platform decisions; full
+    per-team opt-out sits behind `allow_team_content_safety_opt_out`
+    (default `false`); `limit_maxima` optionally caps effective limits.
+  - **Model allowlist**: 403 `model_not_permitted` when a registered caller asks
+    for something outside its list — enforced on BOTH surfaces. The facade names
+    canonical models; the legacy `/openai` path addresses deployments, so the
+    registry renders the mapped deployment set too (hence the new `model_map`
+    input) and neither surface can be used to dodge the other. A team that
+    declares no allowlist gets no check, exactly as before.
+  - **Fail closed**: with the seam active, an admitted caller absent from the
+    registry gets **403 `not_onboarded`** — otherwise not registering would
+    bypass allowlists and content-safety overrides. Inert seam (no registry
+    management) keeps today's tier-preset behaviour exactly.
+  - **Content-safety category blocks now return the taxonomy body.** Live probing
+    showed the two failure shapes differ: *shield* blocks raise `on-error` with
+    `Source=llm-content-safety`, but *category* blocks raise it with
+    `Source=request-forwarder` and `Reason=ContentSafetyPolicyViolated`. The
+    taxonomy matched only the former, so category blocks leaked APIM's native
+    `{"statusCode":403,...}` body; it now matches both and returns
+    `403 content_filtered` either way. This gap predates this change.
+  - **Team and tier limits use separate counter-key namespaces** (`team|` / `tier|`).
+    APIM keeps one counter per counter-key across every scope, and the passthrough
+    `ai_services` APIs carry the tier fragment without the team fragment — so a
+    shared key let passthrough traffic spend a team's LLM rate budget (and vice
+    versa) whenever the two limits differed.
+  - `allow_team_content_safety_opt_out` also gates per-category
+    `enabled: false`, not just the top-level flag — disabling every category
+    screened nothing but Prompt Shield and previously slipped past the switch.
+  - `limit_maxima` gained `token_quota_period`, and quota ceilings are compared
+    as tokens-per-day: without that, a team could keep the platform's quota
+    number and change the period from Monthly to Hourly for ~730x the budget.
+  - A bare `violence: 2` (the natural shorthand for `{ threshold: 2 }`) is now
+    rejected by name instead of being silently accepted and ignored.
+  - Tier/platform-CS fragments gain guards (`team-policied`,
+    `team-cs-policied`) so exactly one authority applies per caller; limit
+    policies inside `<choose>` branches were doc- and live-verified to count
+    per branch. 16 new plan-time validation rules with named-entry messages;
+    `effective_policies` output as the merged audit view.
+
 - **Versioned facade `/v1/chat/completions`** (#38) — the gateway's recommended
   consumer contract, decoupling callers from Azure's surface in both directions:
   - **Model indirection**: callers request canonical names; `var.model_map` maps

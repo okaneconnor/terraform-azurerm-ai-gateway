@@ -1,0 +1,36 @@
+<fragment>
+  <!-- Rendered from the team registry by the onboarding state. Registered
+       callers get their effective limits and allowlist; everyone else is
+       refused (fail closed: an unregistered caller would otherwise dodge
+       allowlists and content-safety overrides entirely). -->
+%{ if length(services) > 0 ~}
+  <choose>
+%{ for s in services ~}
+    <when condition="@((string)context.Variables[&quot;caller-app-id&quot;] == &quot;${s.client_id}&quot;)">
+      <set-variable name="team-policied" value="@(true)" />
+%{ if s.allowlist_explicit ~}
+      <set-variable name="allowed-models" value="${join(",", s.allowed_models)}" />
+      <set-variable name="allowed-deployments" value="${join(",", s.allowed_deployments)}" />
+%{ endif ~}
+      <rate-limit-by-key calls="${s.limits.rate_limit_calls}" renewal-period="${renewal}" counter-key="@(&quot;team|&quot; + (string)context.Variables[&quot;caller-app-id&quot;])" />
+      <llm-token-limit tokens-per-minute="${s.limits.tokens_per_minute}"%{ if s.limits.token_quota != null } token-quota="${s.limits.token_quota}" token-quota-period="${s.limits.token_quota_period}"%{ endif } estimate-prompt-tokens="false" counter-key="@(&quot;team|&quot; + (string)context.Variables[&quot;caller-app-id&quot;])" />
+    </when>
+%{ endfor ~}
+    <otherwise>
+      <return-response>
+        <set-status code="403" reason="Forbidden" />
+        <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+        <set-header name="x-correlation-id" exists-action="override"><value>@(context.RequestId.ToString())</value></set-header>
+        <set-body>{"error":{"message":"This caller holds the admission role but has no entry in the gateway's team registry.","type":"permission_error","code":"not_onboarded"}}</set-body>
+      </return-response>
+    </otherwise>
+  </choose>
+%{ else ~}
+  <return-response>
+    <set-status code="403" reason="Forbidden" />
+    <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+    <set-header name="x-correlation-id" exists-action="override"><value>@(context.RequestId.ToString())</value></set-header>
+    <set-body>{"error":{"message":"This caller holds the admission role but has no entry in the gateway's team registry.","type":"permission_error","code":"not_onboarded"}}</set-body>
+  </return-response>
+%{ endif ~}
+</fragment>
