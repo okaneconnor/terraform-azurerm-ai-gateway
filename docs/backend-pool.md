@@ -181,7 +181,7 @@ the PAYG/Standard spillover role at `priority = 2`; a bring-your-own PTU endpoin
 ```hcl
 module "ai_gateway" {
   source  = "okaneconnor/ai-gateway/azurerm"
-  version = "~> 1.0"
+  version = "~> 2.0"
 
   location        = "uksouth"
   publisher_name  = "AI Platform Team"

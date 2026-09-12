@@ -23,7 +23,7 @@ provider "azapi" {}
 
 module "ai_gateway" {
   source  = "okaneconnor/ai-gateway/azurerm"
-  version = "~> 1.0"
+  version = "~> 2.0"
 
   location        = "uksouth"
   publisher_name  = "AI Platform Team"
