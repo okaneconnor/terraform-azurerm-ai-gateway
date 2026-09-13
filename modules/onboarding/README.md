@@ -74,7 +74,13 @@ is active — selects the preset that seeds the team's limits.
 
 With `apim_id` set, this module renders per-team policy from the registry and
 writes it into two gateway-owned-but-inert policy fragments
-(`ai-team-overrides`, `ai-team-content-safety`) via `azapi_update_resource`.
+(`ai-team-overrides`, `ai-team-content-safety`) via `azapi_resource_action` PUTs,
+re-fired by a content-hash trigger.
+
+**These two fragments are not drift-detected.** The writers are fire-and-forget
+actions, not tracked resources, so a hotfix applied to either fragment in the portal
+persists silently until the next registry change rewrites it. Treat the registry as
+the only supported way to change them.
 The gateway created those fragments with `ignore_changes` on their content, so:
 
 - a registry change plans **only** the fragment update, in this state;
@@ -158,7 +164,7 @@ A team's PR to raise its own token budget is one line —
 ```
 
 — and the plan that PR produces touches one resource
-(`azapi_update_resource.team_overrides`), in the onboarding state only.
+(`azapi_resource_action.team_overrides_write`), in the onboarding state only.
 
 The `effective_policies` output is the audit view: the fully merged limits,
 allowlist and content-safety settings every registered service actually gets.

@@ -8,20 +8,30 @@
     <include-fragment fragment-id="ai-team-overrides" />
     <include-fragment fragment-id="ai-tier-rate" />
     <include-fragment fragment-id="ai-tier-tokens" />
+    <!-- As<JObject>() THROWS on a body that is not valid JSON, and an unhandled
+         throw here leaves the pipeline as a 500 with no taxonomy body — which both
+         looks like a gateway fault to the caller (SDKs retry it) and pages us on the
+         5xx alert. Parse once, defensively, and treat unparseable as what it is: a
+         bad request. -->
+    <set-variable name="body-valid" value="@{
+        try {
+            var b = context.Request.Body?.As&lt;JObject&gt;(preserveContent: true);
+            return b != null &amp;&amp; b[&quot;model&quot;] != null &amp;&amp; b[&quot;messages&quot;] != null;
+        } catch (Exception) { return false; }
+    }" />
     <set-variable name="requested-model" value="@{
-        var body = context.Request.Body?.As&lt;JObject&gt;(preserveContent: true);
-        return body != null &amp;&amp; body[&quot;model&quot;] != null ? (string)body[&quot;model&quot;] : &quot;&quot;;
+        try {
+            var b = context.Request.Body?.As&lt;JObject&gt;(preserveContent: true);
+            return b != null &amp;&amp; b[&quot;model&quot;] != null ? (string)b[&quot;model&quot;] : &quot;&quot;;
+        } catch (Exception) { return &quot;&quot;; }
     }" />
     <choose>
-      <when condition="@{
-          var body = context.Request.Body?.As&lt;JObject&gt;(preserveContent: true);
-          return body == null || body[&quot;model&quot;] == null || body[&quot;messages&quot;] == null;
-      }">
+      <when condition="@(!(bool)context.Variables[&quot;body-valid&quot;])">
         <return-response>
           <set-status code="400" reason="Bad Request" />
           <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
           <set-header name="x-correlation-id" exists-action="override"><value>@(context.RequestId.ToString())</value></set-header>
-          <set-body>{"error":{"message":"model and messages are required.","type":"invalid_request_error","code":"invalid_request"}}</set-body>
+          <set-body>{"error":{"message":"Request body must be valid JSON containing model and messages.","type":"invalid_request_error","code":"invalid_request"}}</set-body>
         </return-response>
       </when>
     </choose>
@@ -58,6 +68,9 @@
 %{ if semantic_cache_enabled ~}
     <llm-semantic-cache-lookup score-threshold="${score_threshold}" embeddings-backend-id="embeddings-backend" embeddings-backend-auth="system-assigned" ignore-system-messages="true">
       <vary-by>@((string)context.Variables[&quot;caller-app-id&quot;])</vary-by>
+      <!-- Without the deployment, the same prompt asked of two different models
+           returns whichever answer was cached first. -->
+      <vary-by>@((string)context.Variables[&quot;deployment&quot;])</vary-by>
     </llm-semantic-cache-lookup>
 %{ endif ~}
     <set-backend-service backend-id="foundry-pool" />

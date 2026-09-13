@@ -1,0 +1,68 @@
+name: docs-drift
+
+# Prose is maintained by hand and drifts silently. terraform-docs already guards the
+# generated tables; this guards the sentences around them. Every pattern below is a
+# real drift that shipped: each was found by review or audit, not by a test.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No retired tooling names
+        run: |
+          # tfsec was replaced by trivy. CONTRIBUTING referenced it for months after.
+          ! grep -rn --include='*.md' --include='*.yaml' --include='*.yml' \
+              --exclude='docs-drift.yml' --exclude='CHANGELOG.md' \
+              -e 'tfsec' . \
+            || { echo "::error::'tfsec' is retired — use 'trivy config .'"; exit 1; }
+
+      - name: No stale tier names in docs or examples
+        run: |
+          # ai-sandbox / ai-production-standard were a private harness's tier keys.
+          # Copy-pasting them against module defaults yields null, then a 401.
+          ! grep -rn --include='*.md' --include='*.tf' \
+              --exclude='docs-drift.yml' \
+              -e 'ai-sandbox' -e 'ai-production-standard' . \
+            || { echo "::error::stale tier key — the shipped default is 'standard'"; exit 1; }
+
+      - name: No references to scripts that do not exist
+        run: |
+          for s in test-tiers.sh test-cache.sh; do
+            if grep -rqn --include='*.md' --exclude='docs-drift.yml' -e "$s" .; then
+              [ -f "scripts/$s" ] || { echo "::error::docs reference scripts/$s which does not exist"; exit 1; }
+            fi
+          done
+
+      - name: No pre-v2 auth model in prose
+        run: |
+          # v2 has ONE admission role; tiers are limit presets. See
+          # docs/architecture.md#the-auth-model — the canonical statement.
+          # upgrading-v2.md is exempt: it documents v1 deliberately, to migrate from.
+          if grep -rniE --include='*.md' --exclude='docs-drift.yml' \
+               -e 'tiers are entra app roles' \
+               -e 'consumption tiers are entra app roles' \
+               -e 'granted a tier app-role' . \
+             | grep -v 'docs/upgrading-v2.md'; then
+            echo "::error::pre-v2 auth model in prose — link docs/architecture.md#the-auth-model instead"
+            exit 1
+          fi
+
+      - name: Onboarding docs name the resource types actually used
+        run: |
+          # azapi_update_resource implies drift detection the module does not have.
+          # Scoped to the onboarding docs: azapi_update_resource IS used legitimately
+          # in the root module (apim.tf) and appears in the generated resource table.
+          ! grep -rn --include='*.md' -e 'azapi_update_resource' modules/onboarding/ \
+            || { echo "::error::the onboarding writers are azapi_resource_action, not azapi_update_resource"; exit 1; }

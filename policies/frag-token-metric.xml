@@ -1,7 +1,9 @@
 <fragment>
+  <!-- No Client IP dimension: custom-metric dimensions are capped (~100 unique
+       values) and past the cap Azure stops recording the series, silently losing the
+       chargeback data this fragment exists to produce. -->
   <llm-emit-token-metric namespace="llm-metrics">
     <dimension name="API ID" />
-    <dimension name="Client IP" value="@(context.Request.IpAddress)" />
     <!-- caller-app-id is set by frag-entra-jwt from the VALIDATED client token.
          Do not read the Authorization header here: by this point in the pipeline
          ai-backend-managed-identity has overwritten it with the MSI token. -->

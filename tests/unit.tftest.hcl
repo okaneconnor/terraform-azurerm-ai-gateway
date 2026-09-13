@@ -1470,3 +1470,66 @@ run "team_seam_when_content_safety_disabled" {
     error_message = "With CS disabled the seam fragment still exists (inert) but is not included."
   }
 }
+
+run "assessment_regression_guards" {
+  command = plan
+
+  variables {
+    semantic_cache = { enabled = true }
+    alerts = {
+      enabled         = true
+      email_receivers = ["ops@example.com"]
+    }
+  }
+
+  # Same prompt, two models: without the deployment in vary-by, whichever answer was
+  # cached first is served for both.
+  assert {
+    condition = alltrue([
+      strcontains(azurerm_api_management_api_policy.facade.xml_content, "context.Variables[&quot;deployment&quot;])</vary-by>"),
+      length(regexall("<vary-by>", azurerm_api_management_api_policy.facade.xml_content)) == 2,
+    ])
+    error_message = "The semantic cache must vary by caller AND resolved deployment."
+  }
+
+  # As<JObject>() throws on a non-JSON body; unguarded that surfaces as a 500 with no
+  # taxonomy body, which SDKs retry and the 5xx alert pages on.
+  assert {
+    condition = alltrue([
+      strcontains(azurerm_api_management_api_policy.facade.xml_content, "catch (Exception)"),
+      strcontains(azurerm_api_management_api_policy.facade.xml_content, "body-valid"),
+    ])
+    error_message = "Facade body parsing must be total — a malformed body is a 400, never a 500."
+  }
+
+  # Custom-metric dimensions are capped (~100 unique values); past the cap the series
+  # stops recording and the chargeback data silently disappears.
+  assert {
+    condition = alltrue([
+      !strcontains(azurerm_api_management_policy_fragment.token_metric.value, "context.Request.IpAddress"),
+      strcontains(azurerm_api_management_policy_fragment.token_metric.value, "caller-app-id"),
+    ])
+    error_message = "Token metrics must not carry an unbounded-cardinality dimension."
+  }
+
+  # A shared Log Analytics workspace holds every gateway's logs.
+  assert {
+    condition = alltrue([
+      strcontains(azurerm_monitor_scheduled_query_rules_alert_v2.throttle_429["this"].criteria[0].query, "_ResourceId endswith"),
+      strcontains(azurerm_monitor_scheduled_query_rules_alert_v2.backend_failures["this"].criteria[0].query, "_ResourceId endswith"),
+    ])
+    error_message = "Alert queries must be scoped to this gateway, not every gateway on the workspace."
+  }
+}
+
+run "rejects_plaintext_byo_backend" {
+  command = plan
+  variables {
+    backend_pool = {
+      members = {
+        insecure = { endpoint_url = "http://byo.example.com", priority = 2, weight = 50 }
+      }
+    }
+  }
+  expect_failures = [var.backend_pool]
+}

@@ -4,6 +4,60 @@ All notable changes to this module are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the module follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **First-apply race on the legacy `/openai` API.** Its policy includes
+  `ai-model-allowlist` but never declared the fragment in `depends_on` — only the
+  facade did, though both include the identical eleven. Terraform was free to create
+  the policy before the fragment existed, which APIM rejects. It resolved favourably
+  on every apply we ran, which is exactly why live verification never caught it.
+- **A malformed request body returned 500.** `As<JObject>()` throws on non-JSON, and
+  the unhandled throw left the pipeline as a 500 with no taxonomy body — retried by
+  SDKs and paging the 5xx alert. Parsing is now total; an unparseable body is
+  `400 invalid_request`, which is what it is.
+- **The semantic cache varied by caller but not by model.** The same prompt asked of
+  two different deployments returned whichever answer was cached first. `vary-by` now
+  includes the resolved deployment.
+- **Token metrics carried an unbounded `Client IP` dimension.** Custom-metric
+  dimensions are capped around 100 unique values; past the cap the series silently
+  stops recording — losing the chargeback data the fragment exists to produce.
+- **Alert queries matched every gateway on a shared Log Analytics workspace.** Both
+  scheduled-query rules are now scoped to this instance.
+- **Broken smoke tests in the docs.** `docs/usage.md` and `examples/complete/README.md`
+  read a `demo_clients` key from a private test harness rather than the module, so a
+  newcomer's first request returned 401 in a way that looked like their own mistake.
+  They now read whichever tier the deployment defines.
+
+### Added
+
+- `backend_pool.members[*].endpoint_url` must be `https://` — the gateway sends a
+  managed-identity bearer token to it, which over plain http would cross the wire in
+  clear.
+- **A `docs-drift` CI job.** Prose is hand-maintained and drifts silently;
+  terraform-docs already guards the generated tables, this guards the sentences. Every
+  pattern it checks is a drift that actually shipped. It caught one more the day it
+  was written.
+
+### Changed
+
+- **One canonical statement of the auth model**, in `docs/architecture.md`. The README,
+  examples and variable descriptions link to it rather than restating it — several had
+  drifted back to the pre-v2 model where tiers were Entra app roles.
+- Two absolute claims qualified: "no API keys anywhere" (the optional Redis cache holds
+  one in state) and "all AI backends are private-endpoint only" (a bring-your-own pool
+  member is reached over APIM's egress).
+- `docs/onboarding.md`, `docs/naming.md` and `docs/upgrading-v2.md` are now reachable
+  from the README index; `modules/onboarding/README.md` names the resource types the
+  code actually uses and states that the two written fragments are **not**
+  drift-detected.
+- CONTRIBUTING: `tfsec` → `trivy config .`, the onboarding test suite, and an explicit
+  statement of what gets merged.
+- `terraform-docs.yml` no longer pins `ref: head.ref`, which resolved against the base
+  repo — fork PRs either failed outright or, when the fork's branch was also named
+  `main`, checked out base `main` and passed without testing the contribution.
+
 ## [2.0.0] — 2026-09-13
 
 ### Breaking

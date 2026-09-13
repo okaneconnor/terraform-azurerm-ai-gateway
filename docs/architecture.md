@@ -2,7 +2,9 @@
 
 A private, keyless, multi-service Azure AI gateway on API Management. Clients
 authenticate with an Entra ID token (client-credentials, app-role gated) — no
-subscription keys, no API keys anywhere. Every AI backend is private-endpoint only.
+subscription keys, and no API keys on the model path. Every *module-created* AI
+backend is private-endpoint only; a bring-your-own pool member (`endpoint_url`) is
+reached over APIM's egress, and the optional Redis cache holds an access key in state.
 
 ```
 Client app (Entra client-credentials)
@@ -54,14 +56,38 @@ private endpoints inside the VNet.
 including ones answered from cache. (The cost is one Content Safety call per request
 rather than per cache-miss; this is the deliberate default.)
 
-## Keyless tiering (no APIM products)
+## The auth model
 
-There are **no APIM products** — an open product (subscription not required) can hold
-any given API only once, and product-scope policies don't execute for keyless
-requests. Tiering is therefore enforced in the **API policy** via the Entra `roles`
-claim, with rate/token limits keyed by the `azp` (client app id) claim. Tier branches
-are ordered by `tokens_per_minute` descending, so a client holding several roles gets
-its best tier.
+This is the canonical description. Everything else in the docs links here rather than
+restating it.
+
+Three concerns, deliberately separated:
+
+| Concern | Where it lives | Answers | Changes |
+| --- | --- | --- | --- |
+| **Admission** | one Entra app role (`admission_app_role`, default `AI.Gateway.Standard`) | may this identity reach the gateway at all? | rarely; a directory operation |
+| **Consumption** | named presets in `var.tiers`, selected by `var.default_tier` | what rate and token limits apply? | often; config, PR-reviewed |
+| **Differentiation** | the optional [onboarding registry](../modules/onboarding/README.md) | what does *this specific team* get? | per team, by pull request |
+
+**A token never carries limits.** It carries the admission role and nothing more. That
+is the point: adding a tier is a config edit, not a change to the directory, and a
+caller cannot escalate by acquiring roles.
+
+Limits are keyed by the caller's `azp` claim (its client app id), falling back to
+`appid` for v1.0 tokens. A token carrying neither is refused with
+`403 missing_caller_id` rather than silently sharing one bucket with every other such
+caller — see `policies/frag-entra-jwt.xml`.
+
+There are **no APIM products**: an open product (subscription not required) can hold
+any given API only once, and product-scope policies do not execute for keyless
+requests. Everything is therefore enforced in the API policy chain.
+
+### Before v2
+
+v1 gave every tier its own app role and read the tier from the `roles` claim, ordering
+branches so a caller holding several roles got its best tier. That created two
+competing authorities and made adding a tier a privileged directory change. See
+[upgrading-v2.md](upgrading-v2.md) to migrate.
 
 ## Wildcard passthrough services
 

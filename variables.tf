@@ -553,6 +553,15 @@ variable "backend_pool" {
     error_message = "Each backend_pool.members entry must set exactly one of create_account or endpoint_url."
   }
   validation {
+    # The MI fragment sets an Authorization header on the way to this endpoint; over
+    # plain http that bearer token would cross the wire in clear.
+    condition = alltrue([
+      for k, m in var.backend_pool.members :
+      m.endpoint_url == null ? true : can(regex("^https://", m.endpoint_url))
+    ])
+    error_message = "backend_pool.members endpoint_url must start with https:// — the gateway sends a managed-identity bearer token to it."
+  }
+  validation {
     condition = alltrue([
       for k, m in var.backend_pool.members :
       m.priority >= 1 && m.priority <= 100 && m.weight >= 1 && m.weight <= 100

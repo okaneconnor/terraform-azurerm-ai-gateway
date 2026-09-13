@@ -2,8 +2,12 @@
 
 A reusable Terraform module for a **private, keyless, multi-service Azure AI gateway**
 built on Azure API Management. Clients authenticate with an Entra ID token
-(client-credentials, app-role gated) — no subscription keys, no API keys anywhere. All
-AI backends are private-endpoint only.
+(client-credentials, app-role gated) — no subscription keys, and no API keys on the
+model path: every Cognitive account runs with `local_auth_enabled = false` and is
+reached over a private endpoint with the gateway's managed identity. Two documented
+exceptions: the optional semantic cache holds a Redis access key in state, and a
+bring-your-own pool member is reached over APIM's egress rather than a private
+endpoint.
 
 Licensed under the [MIT License](LICENSE).
 
@@ -12,8 +16,9 @@ Licensed under the [MIT License](LICENSE).
 - **APIM (VNet-injected, External or Internal)** fronting Azure AI Foundry (OpenAI)
   plus any set of Cognitive Services you choose — all reached over private endpoints
   with the gateway's managed identity.
-- **Keyless tiering** — consumption tiers are Entra app roles; rate and token limits
-  render from one `tiers` map. Adding a tier is one map entry.
+- **Keyless admission and consumption** — one Entra app role decides *whether* a
+  caller is admitted; named presets in the `tiers` map decide *what* it gets. Tokens
+  never carry limits. See [the auth model](docs/architecture.md#the-auth-model).
 - **AI gateway policies** — prompt screening (Content Safety + Prompt Shield) on
   *every* prompt, semantic caching (Azure Managed Redis + RediSearch) partitioned per
   client, per-client token metrics for chargeback, circuit-broken backend pool.
@@ -184,6 +189,9 @@ module "ai_gateway" {
 | [docs/usage.md](docs/usage.md) | Deploy, bring-your-own / landing-zone adoption, get a token, onboard a team, live tests |
 | [docs/backend-pool.md](docs/backend-pool.md) | Multi-member backend pool: PTU-priority + PAYG-spillover, priority/weight semantics, `trip_on_429`, the two spillover layers |
 | [docs/operations.md](docs/operations.md) | Deployment gotchas, A2A agents, production hardening, cost, linting & scanning |
+| [docs/onboarding.md](docs/onboarding.md) | Granting, handing off, verifying and revoking a team's access; the registry submodule |
+| [docs/naming.md](docs/naming.md) | The CAF naming convention, token order, and the `custom_names` escape hatch |
+| [docs/upgrading-v2.md](docs/upgrading-v2.md) | Migrating v1 → v2: naming, the single admission role, the optional registry |
 
 ## Known limitations
 

@@ -223,5 +223,5 @@ identical prompt returns the same completion `id` (semantic-cache hit); a sandbo
 client eventually returns `429` once its rate/token window is exhausted. The cache is
 partitioned per client (`azp`), so a second client never sees another's completion.
 
-Avoid running `test-tiers.sh` and `test-cache.sh` back-to-back — the tier test
-exhausts rate windows and the collateral throttling makes the cache test flaky.
+Run the rate-limit and cache checks in separate windows — exhausting a rate window
+makes a following cache check flaky through collateral throttling.
