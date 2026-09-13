@@ -116,8 +116,8 @@ Run these from the directory you deployed the module in, with
 ```bash
 export TENANT_ID=$(terraform output -raw tenant_id)
 export GATEWAY_APP_ID=$(terraform output -raw gateway_app_client_id)
-export CLIENT_ID=$(terraform output -json demo_clients | jq -r '."ai-sandbox".client_id')
-export CLIENT_SECRET=$(terraform output -json demo_clients | jq -r '."ai-sandbox".client_secret')
+export CLIENT_ID=$(terraform output -json demo_clients | jq -r '."standard".client_id')
+export CLIENT_SECRET=$(terraform output -json demo_clients | jq -r '."standard".client_secret')
 
 # Client-credentials token. The scope is the gateway app's bare client-ID GUID +
 # /.default — NOT api://<guid>/.default (that needs a registered identifier URI and
