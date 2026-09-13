@@ -69,7 +69,7 @@ choices are suppressed **inline** next to the resource with a documented
   verified against a real deployment with `scripts/verify-live.sh` before release;
   you are not expected to hold an Azure subscription to contribute.
 - Docs are part of the change, not a follow-up. CI fails on a stale terraform-docs
-  block and on known-stale prose (see the `docs-drift` job).
+  block; the narrative docs are reviewed by hand.
 
 ## Pull requests
 

@@ -35,10 +35,6 @@ All notable changes to this module are documented here. The format follows
 - `backend_pool.members[*].endpoint_url` must be `https://` — the gateway sends a
   managed-identity bearer token to it, which over plain http would cross the wire in
   clear.
-- **A `docs-drift` CI job.** Prose is hand-maintained and drifts silently;
-  terraform-docs already guards the generated tables, this guards the sentences. Every
-  pattern it checks is a drift that actually shipped. It caught one more the day it
-  was written.
 
 ### Changed
 
