@@ -105,7 +105,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "throttle_429" {
   tags                 = var.tags
 
   criteria {
-    query                   = "ApiManagementGatewayLogs | where ResponseCode == 429"
+    query                   = "ApiManagementGatewayLogs | where _ResourceId endswith '/${local.apim_name}' | where ResponseCode == 429"
     time_aggregation_method = "Count"
     threshold               = var.alerts.throttle_429_threshold
     operator                = "GreaterThan"
@@ -134,7 +134,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "backend_failures" {
   tags                 = var.tags
 
   criteria {
-    query                   = "ApiManagementGatewayLogs | where LastErrorReason in ('PoolIsInactive', 'BackendConnectionFailure', 'BackendConnectionTerminated', 'BackendTimeout')"
+    query                   = "ApiManagementGatewayLogs | where _ResourceId endswith '/${local.apim_name}' | where LastErrorReason in ('PoolIsInactive', 'BackendConnectionFailure', 'BackendConnectionTerminated', 'BackendTimeout')"
     time_aggregation_method = "Count"
     threshold               = var.alerts.backend_failure_threshold
     operator                = "GreaterThan"

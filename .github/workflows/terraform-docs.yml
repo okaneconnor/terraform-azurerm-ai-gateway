@@ -10,9 +10,11 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
+      # No explicit ref: the default checkout for a pull_request event is the merge
+      # commit. Pinning head.ref resolves against the BASE repo, so a fork PR either
+      # fails outright or — when the fork's branch is also named main — silently
+      # checks out base main and passes without testing the contribution at all.
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Verify README.md matches terraform-docs output
         uses: terraform-docs/gh-actions@v1.4.1

@@ -30,8 +30,10 @@ terraform apply -var subscription_id=<your-sub-id>   # APIM VNet provisioning ~3
 export TENANT=$(terraform output -raw tenant_id)
 export GWAPP=$(terraform output -raw gateway_app_client_id)
 export GWURL=$(terraform output -raw gateway_url)
-CID=$(terraform output -json demo_clients | jq -r '."ai-production-standard".client_id')
-CSEC=$(terraform output -json demo_clients | jq -r '."ai-production-standard".client_secret')
+# Take whichever tier the deployment actually defines, so this survives a rename.
+terraform output -json demo_clients | jq 'keys'
+CID=$(terraform output -json demo_clients | jq -r 'to_entries[0].value.client_id')
+CSEC=$(terraform output -json demo_clients | jq -r 'to_entries[0].value.client_secret')
 
 TOKEN=$(curl -s -X POST "https://login.microsoftonline.com/$TENANT/oauth2/v2.0/token" \
   -d grant_type=client_credentials -d "client_id=$CID" -d "client_secret=$CSEC" \
@@ -78,7 +80,8 @@ tier differentiation, content-safety, and residency tests.
   deployment-name parity, and how this compares to Azure OpenAI's service-side
   `spilloverDeploymentName`.
 - Set `create_demo_clients = false` — real consumers bring their own Entra clients and
-  are granted a tier app-role.
+  are granted the single admission role (`admission_app_role`). Their limits come from
+  `default_tier`, or from the onboarding registry if you run it.
 
 ## Teardown
 

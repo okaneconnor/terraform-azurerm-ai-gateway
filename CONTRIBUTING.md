@@ -7,7 +7,7 @@ the docs and tests in step with the code.
 ## Prerequisites
 
 ```bash
-brew install terraform terraform-docs tfsec checkov pre-commit
+brew install terraform terraform-docs trivy checkov pre-commit
 ```
 
 - Terraform >= 1.9
@@ -22,15 +22,19 @@ Run these before opening a PR — CI runs the same set:
 terraform fmt -recursive                      # format
 terraform init -backend=false                 # init without a backend / creds
 terraform validate                            # validate the module
-terraform test                                # plan-mode unit tests (mocked providers)
+terraform test                                # root unit tests (mocked providers)
+
+terraform -chdir=modules/onboarding init -backend=false
+terraform -chdir=modules/onboarding test      # the onboarding submodule has its OWN suite
+
 terraform-docs .                              # regenerate the README Inputs/Outputs block
-tfsec . && checkov -d .                       # static analysis (or: pre-commit run -a)
+trivy config . && checkov -d .                # static analysis (or: pre-commit run -a)
 ```
 
 ### Pre-commit
 
 A [`.pre-commit-config.yaml`](.pre-commit-config.yaml) wires `fmt` → `validate` →
-`terraform-docs` → `tfsec` → `checkov` plus basic hygiene hooks. Enable it once:
+`terraform-docs` → `trivy` → `checkov` plus basic hygiene hooks. Enable it once:
 
 ```bash
 pre-commit install
@@ -48,9 +52,24 @@ pre-commit run -a    # run against everything on demand
 
 ## Static analysis
 
-Both `tfsec` and `checkov` must pass. Genuine false positives or deliberate design
+Both `trivy config` and `checkov` must pass. Genuine false positives or deliberate design
 choices are suppressed **inline** next to the resource with a documented
 `#checkov:skip=<ID>:<reason>` comment — never blanket-disable a check globally.
+
+## What gets merged
+
+- **Plan-mode tests are always required.** Every validation rule needs a failing-case
+  test; every behaviour worth claiming needs an assertion that would fail if the
+  behaviour were removed. Both suites must be green — the root one and
+  `modules/onboarding`.
+- Both suites are also run against the **Terraform version floor** (see `TF_VERSION`
+  in `.github/workflows/ci.yml`). `||` and `&&` do not short-circuit on 1.9.x, so
+  expressions that pass on current Terraform can still fail there.
+- **Live verification is maintainer-run.** Changes that alter runtime behaviour are
+  verified against a real deployment with `scripts/verify-live.sh` before release;
+  you are not expected to hold an Azure subscription to contribute.
+- Docs are part of the change, not a follow-up. CI fails on a stale terraform-docs
+  block; the narrative docs are reviewed by hand.
 
 ## Pull requests
 

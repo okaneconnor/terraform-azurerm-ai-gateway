@@ -279,7 +279,7 @@ resource "azapi_resource_action" "team_overrides_write" {
   depends_on = [terraform_data.registry_guard, terraform_data.overrides_guard]
 }
 
-# Destroy-time twin: azapi_update_resource cannot restore what it overwrote,
+# Destroy-time twin: the writer cannot restore what it overwrote,
 # so removal resets the fragment to the gateway's inert content.
 resource "azapi_resource_action" "team_overrides_reset" {
   for_each    = local.overrides_enabled ? { this = {} } : {}

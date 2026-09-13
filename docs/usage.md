@@ -116,8 +116,8 @@ Run these from the directory you deployed the module in, with
 ```bash
 export TENANT_ID=$(terraform output -raw tenant_id)
 export GATEWAY_APP_ID=$(terraform output -raw gateway_app_client_id)
-export CLIENT_ID=$(terraform output -json demo_clients | jq -r '."ai-sandbox".client_id')
-export CLIENT_SECRET=$(terraform output -json demo_clients | jq -r '."ai-sandbox".client_secret')
+export CLIENT_ID=$(terraform output -json demo_clients | jq -r '."standard".client_id')
+export CLIENT_SECRET=$(terraform output -json demo_clients | jq -r '."standard".client_secret')
 
 # Client-credentials token. The scope is the gateway app's bare client-ID GUID +
 # /.default — NOT api://<guid>/.default (that needs a registered identifier URI and
@@ -223,5 +223,5 @@ identical prompt returns the same completion `id` (semantic-cache hit); a sandbo
 client eventually returns `429` once its rate/token window is exhausted. The cache is
 partitioned per client (`azp`), so a second client never sees another's completion.
 
-Avoid running `test-tiers.sh` and `test-cache.sh` back-to-back — the tier test
-exhausts rate windows and the collateral throttling makes the cache test flaky.
+Run the rate-limit and cache checks in separate windows — exhausting a rate window
+makes a following cache check flaky through collateral throttling.
