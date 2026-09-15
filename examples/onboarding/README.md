@@ -14,10 +14,12 @@ split, and it is worth asserting in CI.
 ## Wiring
 
 The onboarding state takes the gateway's outputs as inputs. Pass them however
-your estate moves values between states — CI variables, a shared tfvars file, or
-a `terraform_remote_state` data source if you already share state access. Prefer
-passing the values: reading the gateway's state hands whatever runs onboarding
-*every* gateway output, including the sensitive ones, when it needs these eight.
+your estate moves values between states — CI variables or a shared tfvars file.
+
+Do not reach for a `terraform_remote_state` data source on the gateway, even if
+you already share state access. It hands whatever runs onboarding *every* gateway
+output, sensitive ones included, when it needs eight non-secret values — and it
+recouples the two states that this split exists to keep apart.
 
 Admission only:
 

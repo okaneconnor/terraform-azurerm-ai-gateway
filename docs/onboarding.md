@@ -60,9 +60,9 @@ module "onboarding" {
   version = "~> 2.0"
 
   registry_file         = "${path.module}/teams.yaml"
-  gateway_app_object_id = data.terraform_remote_state.gateway.outputs.gateway_app_object_id
-  gateway_app_role_id   = data.terraform_remote_state.gateway.outputs.gateway_app_role_id
-  tier_names            = data.terraform_remote_state.gateway.outputs.tier_names
+  gateway_app_object_id = var.gateway_app_object_id
+  gateway_app_role_id   = var.gateway_app_role_id
+  tier_names            = var.tier_names
 }
 ```
 
@@ -77,9 +77,9 @@ resource the registry manages for you:
 
 ```hcl
 resource "azuread_app_role_assignment" "team_chat_service" {
-  app_role_id         = data.terraform_remote_state.gateway.outputs.gateway_app_role_id
+  app_role_id         = var.gateway_app_role_id
   principal_object_id = "<team service principal OBJECT id>"
-  resource_object_id  = data.terraform_remote_state.gateway.outputs.gateway_app_object_id
+  resource_object_id  = var.gateway_app_object_id
 }
 ```
 
@@ -87,8 +87,8 @@ For a service principal or managed identity, `principal_object_id` is the
 **object id** (not the application/client id):
 
 ```bash
-az ad sp show --id <app-id-or-object-id> --query id -o tsv   # app registration
-az identity show -g <rg> -n <mi-name> --query principalId -o tsv  # managed identity
+az identity show -g <rg> -n <mi-name> --query principalId -o tsv  # managed identity (preferred)
+az ad sp show --id <app-id-or-object-id> --query id -o tsv        # app registration
 ```
 
 Removing the resource (or `terraform destroy` on the onboarding state) revokes
@@ -111,7 +111,8 @@ Assignments are created on the **resource** service principal's
 an app role to a client service principal):
 
 ```bash
-TEAM_SP=$(az ad sp show --id <team-app-id> --query id -o tsv)
+TEAM_SP=$(az identity show -g <rg> -n <mi-name> --query principalId -o tsv)   # or:
+# TEAM_SP=$(az ad sp show --id <team-app-id> --query id -o tsv)
 GW_SP=$(terraform output -raw gateway_app_object_id)
 ROLE=$(terraform output -raw gateway_app_role_id)
 
