@@ -14,27 +14,31 @@ the content of two gateway policy fragments via `azapi`, which widens its
 credential needs to write access on that one APIM service — still never the
 gateway's Terraform state.
 
+The gateway's outputs reach this state as plain variables, passed in by your
+pipeline, a shared tfvars file, or however your estate moves values between
+states. Onboarding needs eight non-secret values and never the gateway's state
+or its credentials, which is what keeps the two states independent.
+
 ```hcl
-data "terraform_remote_state" "gateway" {
-  backend = "azurerm" # wherever the gateway state lives
-  config  = { /* ... */ }
-}
+variable "gateway_app_object_id" { type = string }
+variable "gateway_app_role_id" { type = string }
+variable "tier_names" { type = list(string) }
 
 module "onboarding" {
   source  = "okaneconnor/ai-gateway/azurerm//modules/onboarding"
   version = "~> 2.0"
 
   registry_file         = "${path.module}/teams.yaml"
-  gateway_app_object_id = data.terraform_remote_state.gateway.outputs.gateway_app_object_id
-  gateway_app_role_id   = data.terraform_remote_state.gateway.outputs.gateway_app_role_id
-  tier_names            = data.terraform_remote_state.gateway.outputs.tier_names
+  gateway_app_object_id = var.gateway_app_object_id
+  gateway_app_role_id   = var.gateway_app_role_id
+  tier_names            = var.tier_names
 
   # Optional — activates per-team enforcement (limits, allowlists, content safety):
-  apim_id                    = data.terraform_remote_state.gateway.outputs.apim_id
-  tier_limits                = data.terraform_remote_state.gateway.outputs.tiers
-  canonical_models           = data.terraform_remote_state.gateway.outputs.canonical_models
-  rate_limit_renewal_seconds = data.terraform_remote_state.gateway.outputs.rate_limit_renewal_seconds
-  content_safety             = data.terraform_remote_state.gateway.outputs.content_safety_contract
+  apim_id                    = var.apim_id
+  tier_limits                = var.tier_limits
+  canonical_models           = var.canonical_models
+  rate_limit_renewal_seconds = var.rate_limit_renewal_seconds
+  content_safety             = var.content_safety
   defaults_file              = "${path.module}/defaults.yaml" # optional platform defaults
 }
 ```
@@ -58,14 +62,23 @@ That identity's `azp` claim is what the gateway keys limits, quotas, cache
 partitions and chargeback on, so one identity per service is enforced: sharing
 one would merge two services' attribution, limits and revocation.
 
-For an app registration:
+A **managed identity is the recommended choice**. There is no secret to
+distribute, rotate or leak, which is the point of the keyless model — the team's
+workload gets its token from the platform it already runs on.
 
 ```bash
-az ad sp show --id <app-client-id> --query "{client_id:appId,principal_object_id:id}" -o json
+az identity show -g <rg> -n <mi-name> \
+  --query "{client_id:clientId,principal_object_id:principalId}" -o json
 ```
 
-For a managed identity, `client_id` is the identity's client id and
-`principal_object_id` its `principalId`.
+Use an app registration only where a managed identity is not available, such as a
+workload running outside Azure. It carries a secret or certificate the team must
+then manage themselves.
+
+```bash
+az ad sp show --id <app-client-id> \
+  --query "{client_id:appId,principal_object_id:id}" -o json
+```
 
 `tier` is validated against the gateway's presets and — once the overrides seam
 is active — selects the preset that seeds the team's limits.
