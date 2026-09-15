@@ -16,10 +16,8 @@ gateway's Terraform state.
 
 The gateway's outputs reach this state as plain variables, passed in by your
 pipeline, a shared tfvars file, or however your estate moves values between
-states. Deliberately **not** a `terraform_remote_state` data source: reading the
-gateway's state would expose every one of its outputs, sensitive ones included,
-to whatever runs onboarding — which is exactly the coupling this split exists to
-avoid.
+states. Onboarding needs eight non-secret values and never the gateway's state
+or its credentials, which is what keeps the two states independent.
 
 ```hcl
 variable "gateway_app_object_id" { type = string }
